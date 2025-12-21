@@ -1,0 +1,79 @@
+/* =============== Footer Layout =============== */
+.site-footer{
+  --bg: #f0b35a;    /* gold */
+  --ink: #1f2850;   /* navy */
+  --muted: #28345f;
+  --ring: rgba(0,0,0,.12);
+
+  background: var(--bg);
+  color: var(--ink);
+  border-top: 2px solid var(--ink);
+  box-shadow: 0 -6px 24px rgba(0,0,0,.18) inset;
+}
+
+.site-footer .footer-inner{
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 18px clamp(16px, 5vw, 32px);
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr; /* brand + 3 kota */
+  gap: clamp(16px, 3vw, 32px);
+  align-items: start;
+}
+
+/* Brand / Sosial */
+.footer-title{
+  margin: 0 0 8px 0;
+  font-weight: 900;
+  letter-spacing: .5px;
+  font-size: clamp(18px, 2.8vw, 28px);
+}
+.brand-cell .socials{
+  display: inline-flex; gap: 10px; margin: 4px 0 12px;
+}
+.brand-cell .ico{
+  width: 34px; height: 34px; border-radius: 8px;
+  display:grid; place-items:center;
+  background: rgba(0,0,0,.10);
+  border:1px solid var(--ring);
+  transition: transform .1s ease, background .2s ease;
+}
+.brand-cell .ico:hover{ transform: translateY(-1px); background: rgba(0,0,0,.16); }
+.brand-cell .ico svg{ width: 18px; height: 18px; fill: var(--ink); }
+
+.copy{
+  display:block; margin-top: 8px;
+  font-size: 12px; opacity: .9;
+}
+
+/* Office columns */
+.office-cell .city{
+  margin: 0 0 8px 0;
+  font-size: 12px; letter-spacing: .6px; font-weight: 900;
+}
+.office-cell .email,
+.office-cell .tel{
+  display:block; text-decoration: none; color: var(--ink);
+  font-size: 12px; font-weight: 700; margin: 2px 0;
+}
+.office-cell .email:hover,
+.office-cell .tel:hover{ text-decoration: underline; }
+
+.office-cell .addr{
+  margin-top: 4px; font-style: normal; font-size: 11.5px; line-height: 1.3;
+  display:flex; flex-direction: column;
+  color: var(--muted);
+}
+
+/* =============== Responsive =============== */
+@media (max-width: 900px){
+  .site-footer .footer-inner{
+    grid-template-columns: 1fr 1fr; /* brand + dua kolom */
+  }
+}
+@media (max-width: 600px){
+  .site-footer .footer-inner{
+    grid-template-columns: 1fr; /* tumpuk semua */
+  }
+  .brand-cell{ order: -1; }
+}

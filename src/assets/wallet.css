@@ -1,0 +1,233 @@
+/* =========================
+   Wallet Page (namespaced)
+   ========================= */
+.wallet-page{
+  --bg: #6b0a00;
+  --ink: #ffe9cf;
+  --muted: #f2dbaa;
+  --gold: #f0b35a;
+  --gold-2: #f6d08a;
+  --panel: #5a0800;
+  --border: #b97a2e;
+  --pill: rgba(0,0,0,.12);
+  --item: #F4F1DE;
+
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  outline: none;
+}
+
+/* =========================
+   TOP BAR (HEADER)
+   ========================= */
+.wallet-page .topbar{
+  position: sticky; top: 0; z-index: 10;
+  display: grid;
+  grid-template-columns: 80px 1fr 56px; /* brand | title | hamburger kanan */
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px;
+  background: color-mix(in oklab, var(--bg), black 6%);
+  border-bottom: 1px solid color-mix(in oklab, var(--gold), black 35%);
+  backdrop-filter: blur(4px);
+}
+
+.wallet-page .brand{
+  display:inline-flex; align-items:center; justify-content:flex-start;
+  min-width:64px;
+}
+.wallet-page .brand img{
+  height: clamp(24px, 4vw, 40px);
+  width:auto; display:block;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,.5));
+}
+
+.wallet-page .title{
+  font-weight:800; letter-spacing:.02em;
+  font-size:clamp(20px, 2.4vw, 28px);
+  color:var(--ink);
+}
+.wallet-page .actions{ justify-self:end; }
+
+.wallet-page .hamburger{
+  width:44px; height:44px;
+  display:flex; align-items:center; justify-content:center;
+  background: rgba(0,0,0,.25);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:10px; cursor:pointer;
+}
+.wallet-page .hamburger span{
+  display:block; width:18px; height:2px; background:#fff; margin:2px 0; border-radius:2px; opacity:.9;
+}
+
+/* =========================
+   CONTAINER & PANEL
+   ========================= */
+.wallet-page .container{
+  max-width:1100px;
+  margin:0 auto;
+  padding: clamp(16px, 4vw, 28px) clamp(16px, 4vw, 28px) 56px;
+}
+/* Saat sidebar terbuka di desktop, beri ruang kanan supaya panel tidak tertutup */
+@media (min-width: 1024px){
+  .wallet-page.has-sb .container{
+    padding-right: calc(clamp(16px, 4vw, 28px) + 256px); /* 220px sidebar + gap */
+  }
+}
+
+.wallet-page .panel{
+  background:var(--panel);
+  border:1px solid color-mix(in oklab, var(--border), black 10%);
+  border-radius:12px;
+  padding:clamp(18px, 4vw, 28px);
+  box-shadow:0 18px 40px rgba(0,0,0,.35);
+}
+
+/* Subhead */
+.wallet-page .h-sub{
+  color:var(--gold-2);
+  font-weight:800;
+  font-size:clamp(16px, 2vw, 20px);
+  margin:6px 0 12px;
+}
+
+/* Balance */
+.wallet-page .balance{
+  display:grid; grid-template-columns:1fr auto; align-items:start; gap:16px;
+}
+.wallet-page .balance-value{
+  font-weight:800; font-size:clamp(38px, 6.2vw, 64px);
+  letter-spacing:.01em; color:var(--ink);
+  text-shadow:0 8px 26px rgba(0,0,0,.35);
+}
+.wallet-page .fiat-line{
+  margin-top:4px; font-weight:800; font-size:clamp(18px, 2.8vw, 22px); color:#ffe9cf;
+}
+.wallet-page .fiat-line.muted, .wallet-page .addr.muted{
+  font-weight:600; color:color-mix(in oklab, #ffe9cf, black 35%);
+}
+.wallet-page .addr{ margin-top:2px; }
+
+/* Buttons */
+.wallet-page .btn{
+  align-self:start; padding:10px 16px;
+  background:#fff3db; color:#3a2500;
+  border:none; border-radius:8px;
+  font-weight:800; letter-spacing:.02em; cursor:pointer;
+  box-shadow:0 8px 18px rgba(0,0,0,.25);
+}
+.wallet-page .btn:hover{ transform:translateY(-1px); box-shadow:0 12px 26px rgba(0,0,0,.28); }
+.wallet-page .btns{ display:flex; gap:10px; align-items:flex-start; }
+.wallet-page .btn.ghost{
+  background:transparent; color:#ffe9cf;
+  border:1px solid color-mix(in oklab, #ffe9cf, black 35%);
+}
+
+/* Separator */
+.wallet-page .sep{
+  margin:clamp(18px, 3.2vw, 26px) 0;
+  border:none; height:2px;
+  background:linear-gradient(90deg, var(--gold), transparent 70%);
+  opacity:.85;
+}
+
+/* Transactions */
+.wallet-page .tx-list{
+  list-style:none; padding:0; margin:10px 0 0;
+  border-top:1px solid color-mix(in oklab, var(--gold), black 40%);
+}
+.wallet-page .tx-item{
+  display:grid; grid-template-columns:1fr auto;
+  gap:12px; padding:12px 0;
+  border-bottom:1px solid color-mix(in oklab, var(--gold), black 40%);
+}
+.wallet-page .tx-amount{ color:var(--ink); font-weight:700; letter-spacing:.02em; }
+.wallet-page .tx-date{ color:var(--muted); font-weight:600; }
+
+/* Alert */
+.wallet-page .alert{
+  margin-top:10px; padding:10px 12px; border-radius:10px;
+  background:rgba(0,0,0,.15); border:1px solid rgba(255,255,255,.08);
+  color:var(--ink); font-weight:600;
+}
+.wallet-page .alert.error{ background:#3d1a1a; border-color:#5c2a2a; }
+
+/* Responsif umum */
+@media (max-width: 720px){
+  .wallet-page .topbar{
+    grid-template-columns: 64px 1fr 48px;
+    padding:14px 14px;
+  }
+  .wallet-page .brand img{ height:28px; }
+  .wallet-page .balance{ grid-template-columns:1fr; }
+  .wallet-page .btn{ justify-self:start; }
+}
+
+/* =========================================================
+   SIDEBAR — DI KANAN
+   ========================================================= */
+.wallet-page{
+  --sb-bg: var(--item, #F4F1DE);
+  --sb-ink:#2b2b2b; --sb-muted:#4b4b4b; --sb-ring:rgba(0,0,0,.10);
+  --sb-hover:rgba(0,0,0,.06); --sb-active:rgba(0,0,0,.12);
+}
+
+/* Desktop: kartu statis di kanan */
+/* Desktop: kartu statis di kanan */
+.wallet-page .sb-card{
+  position: fixed;
+  top: calc(clamp(72px, 10vw, 120px) + 10px);
+  right: 20px; left: auto;
+
+  /* >>> tambahkan agar full ke bawah desktop <<< */
+  bottom: 16px;
+  max-height: calc(100svh - (clamp(72px, 10vw, 120px) + 10px) - 16px);
+  overflow: auto;
+
+  width: 220px;
+  background: var(--sb-bg);
+  color: var(--sb-ink);
+  border: 1px solid var(--sb-ring);
+  border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(0,0,0,.35);
+  padding: 14px 12px;
+  z-index: 1050;
+}
+
+.wallet-page .sb-menu{ display:flex; flex-direction:column; gap:10px; }
+.wallet-page .sb-item{
+  display:block; padding:12px 14px; border-radius:12px; text-decoration:none;
+  font-weight:800; letter-spacing:.2px; color:var(--sb-ink); background:transparent;
+  transition: background .15s ease, transform .15s ease, color .15s ease;
+}
+.wallet-page .sb-item:hover{ background:var(--sb-hover); transform: translateX(-2px); }
+.wallet-page .sb-item.active{ background:var(--sb-active); }
+.wallet-page .sb-item.sb-danger{ color:#7a1a1a; }
+
+/* Backdrop untuk mobile */
+.wallet-page .sb-backdrop{
+  position: fixed; inset:0; background:rgba(0,0,0,.50);
+  backdrop-filter: blur(2px); z-index:1000; display:none;
+}
+
+/* Transisi umum (desktop) */
+.wallet-page .sb-enter-from, .wallet-page .sb-leave-to { opacity:0; transform: translateX(10px); }
+.wallet-page .sb-enter-active, .wallet-page .sb-leave-active { transition: all .18s ease; }
+
+/* Mobile: off-canvas dari kanan */
+@media (max-width: 720px){
+  .wallet-page .sb-card{
+    top:0; right:0; left:auto; bottom:0;
+    height:100vh;
+    width:min(86vw, 340px);
+    border-radius: 16px 0 0 16px;
+    padding:18px 16px;
+    box-shadow: -12px 0 36px rgba(0,0,0,.28);
+    z-index:1050;
+  }
+  .wallet-page .sb-backdrop{ display:block; }
+
+  .sb-enter-from, .sb-leave-to{ transform: translateX(100%); opacity:.01; }
+  .sb-enter-active, .sb-leave-active{ transition: transform .22s ease, opacity .22s ease; }
+}

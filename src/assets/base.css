@@ -1,0 +1,53 @@
+/* Palette & semantic tokens */
+:root {
+  --color-background: #0b0d12;
+  --color-background-soft: #0f131b;
+  --color-background-mute: #111826;
+
+  --color-border: #222938;
+  --color-border-hover: #2b3243;
+
+  --color-heading: #e6e8ef;
+  --color-text: #e6e8ef;
+
+  --section-gap: 160px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  font-weight: normal;
+}
+
+/* Global sizing */
+html, body, #app {
+  height: 100%;
+  width: 100%;
+}
+
+/* Body: tema gelap + scroll normal */
+body {
+  min-height: 100vh;
+  background: var(--color-background);
+  color: var(--color-text);
+  transition: color .5s, background-color .5s;
+  line-height: 1.6;
+  font-family:
+    Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  font-size: 15px;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: auto;
+}
+
+/* App container: JANGAN dibatasi lebar/padding */
+#app {
+  max-width: none;     /* <- hilangkan 1280px */
+  margin: 0;           /* <- hilangkan center */
+  padding: 0;          /* <- biarkan layout yang mengatur spacing */
+}

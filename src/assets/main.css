@@ -1,0 +1,16 @@
+@import './base.css';
+
+/* (Opsional) gaya link ringan */
+a,
+.green {
+  text-decoration: none;
+  color: hsla(160, 100%, 37%, 1);
+  transition: 0.2s;
+}
+
+/* Hapus SEMUA aturan yang:
+   - meng-set #app max-width/margin/padding
+   - body { display:flex; place-items:center }
+   - #app { display:grid; grid-template-columns: 1fr 1fr }
+   Karena itu yang membuat tampilan tidak full.
+*/

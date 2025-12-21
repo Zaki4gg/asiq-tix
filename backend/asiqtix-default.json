@@ -1,0 +1,10 @@
+{
+  "name": "AsiqTiX Default Ticket",
+  "description": "Default NFT ticket image by AsiqTiX admin.",
+  "image": "https://fghvxatobiresfakepke.supabase.co/storage/v1/object/public/asiqtix-assets/logo_with_text.png",
+  "external_url": "https://asiqtix.com",
+  "attributes": [
+    { "trait_type": "Platform", "value": "AsiqTiX" },
+    { "trait_type": "Type", "value": "Default Ticket" }
+  ]
+}
