@@ -661,6 +661,18 @@ function imgFor (ev) {
 </template>
 
 <style scoped>
+.topbar{
+  position: sticky; top: 0; z-index: 10;
+  display: grid;
+  grid-template-columns: 80px 1fr 56px;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px;
+  background: color-mix(in oklab, var(--bg), black 6%);
+  border-bottom: 1px solid color-mix(in oklab, var(--gold), black 35%);
+  backdrop-filter: blur(4px);
+}
+
 .fab{
   position: fixed;
   right: max(20px, env(safe-area-inset-right));
@@ -763,7 +775,6 @@ function imgFor (ev) {
 .buy:hover{ filter:brightness(.96); }
 .img-gradient{ display:none !important; }
 
-.home-page{ --topbar-h:64px }
 .hero{
   position: relative;
   min-height: calc(100vh - var(--topbar-h));
@@ -798,5 +809,89 @@ function imgFor (ev) {
 }
 @media (max-width: 640px){
   .hero-title{ letter-spacing: .18em; font-size: clamp(22px, 6.2vw, 42px) }
+}
+
+.brand img{
+  max-width: 160px;
+  height: 28px;
+  width: 100%;
+  object-fit: contain;
+}
+
+/* Fix hero height di mobile (hindari "ngintip" section bawah karena 100vh) */
+@supports (height: 100dvh){
+  .hero{
+    min-height: calc(100dvh - var(--topbar-h));
+    height: calc(100dvh - var(--topbar-h));
+  }
+}
+@supports not (height: 100dvh){
+  .hero{
+    min-height: calc(100vh - var(--topbar-h));
+    height: calc(100vh - var(--topbar-h));
+  }
+}
+
+/* Supaya FAB tidak nutup konten bawah */
+.container{
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+/* Mobile: topbar jadi 2 baris (brand+hamburger di atas, search full di bawah) */
+@media (max-width: 520px){
+  .topbar{
+    grid-template-columns: 1fr 44px;
+    grid-template-areas:
+      "brand hamburger"
+      "search search";
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .brand{ grid-area: brand; }
+  .search--top{
+    grid-area: search;
+    width: 100%;
+  }
+  .hamburger{
+    grid-area: hamburger;
+    justify-self: end;
+  }
+
+  /* Kecilkan elemen topbar agar tidak “mepet” */
+  .search-input{
+    font-size: 14px;
+    padding: 10px 12px;
+  }
+  .search-btn{
+    width: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Mobile: cards wajib 1 kolom + tinggi gambar lebih pendek */
+@media (max-width: 520px){
+  .cards{
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .img-wrap{
+    height: 180px;
+  }
+  .title{
+    width: calc(100% - 24px);
+    text-align: center;
+    padding: 0 12px;
+    font-size: clamp(16px, 4.6vw, 20px);
+    letter-spacing: .12em;
+    white-space: normal; /* boleh wrap kalau sempit */
+  }
+}
+
+/* Extra kecil */
+@media (max-width: 360px){
+  .brand img{ max-width: 132px; height: 24px; }
+  .topbar{ padding: 8px 10px; }
+  .img-wrap{ height: 165px; }
 }
 </style>
