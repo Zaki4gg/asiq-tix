@@ -2,11 +2,11 @@
 import '@/assets/account.css'
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import DrawerNav from '@/components/DrawerNav.vue'
 // import { useConfirmLogout } from '@/composables/useConfirmLogout' // tetap
 import { useMetamask } from '@/composables/useMetamask'
 import profileSvgRaw from '@/assets/profile.svg?raw'
 import { io } from 'socket.io-client'
+import SideNavSB from '@/components/SideNavSB.vue'
 
 /* ---------- ROUTE + DRAWER ---------- */
 const route = useRoute()
@@ -223,7 +223,7 @@ watch(account, async () => { await detectChain(); await refreshBalance(); await 
       </button>
     </header>
 
-    <DrawerNav v-model="sidebarOpen" />
+    <SideNavSB v-model="sidebarOpen" />
 
     <div class="content">
       <div class="grid">
