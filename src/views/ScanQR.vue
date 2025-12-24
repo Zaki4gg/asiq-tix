@@ -23,16 +23,12 @@ const eventMeta = ref(null)
 const errorMsg = ref('')
 const infoMsg = ref('')
 
-/** SIDENAV DRAWER */
+/** SideNavSB REQUIRE v-model */
 const sidebarOpen = ref(false)
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
 }
-function closeSidebar() {
-  sidebarOpen.value = false
-}
 
-/** STATUS UI */
 const statusLabel = computed(() => {
   if (verifyStatus.value === 'valid') return 'VALID'
   if (verifyStatus.value === 'used') return 'SUDAH DIPAKAI'
@@ -46,7 +42,6 @@ const statusClass = computed(() => {
   return ''
 })
 
-/** QR */
 const reader = new BrowserQRCodeReader()
 let controls = null
 
@@ -97,13 +92,6 @@ function parseTxIdFromQr(text) {
   return raw
 }
 
-/**
- * SCAN = REDEEM (sekali pakai)
- * Backend: POST /api/tickets/scan { tx_id }
- * - 200: scanned (valid & berhasil)
- * - 409: already_scanned (tidak valid lagi)
- * - 403: bukan promoter / bukan event miliknya
- */
 async function scanTicketRedeem(id) {
   tx.value = null
   eventMeta.value = null
@@ -139,7 +127,6 @@ async function scanTicketRedeem(id) {
       errorMsg.value = data?.message || 'Tiket ini sudah di-scan dan tidak valid lagi.'
       tx.value = data?.tx || null
       eventMeta.value = data?.event || null
-      processing.value = false
       return
     }
 
@@ -147,7 +134,6 @@ async function scanTicketRedeem(id) {
       verifyStatus.value = 'invalid'
       infoMsg.value = ''
       errorMsg.value = data?.error || data?.message || 'Scan gagal.'
-      processing.value = false
       return
     }
 
@@ -201,7 +187,6 @@ async function startScan() {
         const id = parseTxIdFromQr(text)
         txId.value = id
 
-        // stop setelah 1 scan
         stopScan()
 
         if (id) {
@@ -249,19 +234,9 @@ onUnmounted(() => {
 
 <template>
   <div class="layout">
-    <!-- Backdrop + Drawer Sidebar -->
-    <div v-if="sidebarOpen" class="backdrop" @click="closeSidebar"></div>
+    <!-- IMPORTANT: SideNavSB wajib pakai v-model -->
+    <SideNavSB v-model="sidebarOpen" />
 
-    <aside class="drawer" :class="{ open: sidebarOpen }" aria-label="Sidebar">
-      <div class="drawer-head">
-        <div class="drawer-title">Menu</div>
-        <button class="drawer-close" type="button" aria-label="Close sidebar" @click="closeSidebar">✕</button>
-      </div>
-      <!-- SideNav content -->
-      <SideNavSB />
-    </aside>
-
-    <!-- Page -->
     <div class="page">
       <header class="topbar">
         <div class="left">
@@ -357,16 +332,6 @@ onUnmounted(() => {
               <div class="k2">Amount</div><div class="v2">{{ tx.amount }}</div>
               <div class="k2">Created</div><div class="v2">{{ tx.created_at }}</div>
               <div class="k2">Event Ref</div><div class="v2 mono">{{ tx.ref_id || '—' }}</div>
-
-              <template v-if="tx.scanned !== undefined">
-                <div class="k2">Scanned</div><div class="v2">{{ String(tx.scanned) }}</div>
-              </template>
-              <template v-if="tx.scanned_at">
-                <div class="k2">Scanned At</div><div class="v2 mono">{{ tx.scanned_at }}</div>
-              </template>
-              <template v-if="tx.scanned_by">
-                <div class="k2">Scanned By</div><div class="v2 mono">{{ tx.scanned_by }}</div>
-              </template>
             </div>
           </div>
 
@@ -387,11 +352,9 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* BASE */
 .layout { min-height: 100vh; background: #0b0d12; }
 .page { max-width: 1200px; margin: 0 auto; padding: 16px; }
 
-/* TOPBAR */
 .topbar {
   position: sticky; top: 0; z-index: 5;
   background: rgba(11,13,18,.85);
@@ -424,7 +387,6 @@ onUnmounted(() => {
 
 .actions { display:flex; gap:8px; flex-wrap: wrap; justify-content:flex-end; }
 
-/* CONTENT */
 .content { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
 
 .panel {
@@ -445,7 +407,6 @@ onUnmounted(() => {
   background: #fff;
 }
 
-/* VIDEO */
 .video-wrap {
   position: relative;
   width: 100%;
@@ -498,7 +459,6 @@ onUnmounted(() => {
 
 .hint { color:#666; margin: 10px 0 0; font-size: 13px; }
 
-/* RESULT */
 .alert { padding: 10px 12px; border-radius: 12px; margin-bottom: 12px; border: 1px solid #eee; }
 .alert.info { background: #f6f6f6; }
 .alert.error { background: #ffecec; border-color: #ffd0d0; }
@@ -517,6 +477,7 @@ onUnmounted(() => {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   word-break: break-all;
 }
+
 .pill {
   display:inline-block; padding: 6px 10px; border-radius: 999px;
   background:#f0f0f0; font-weight: 900; font-size: 12px;
@@ -539,7 +500,6 @@ onUnmounted(() => {
 .k2 { font-weight: 700; color: #111; }
 .v2 { color: #111; }
 
-/* BUTTONS */
 .btn {
   padding: 9px 12px;
   border-radius: 12px;
@@ -554,42 +514,6 @@ onUnmounted(() => {
 .btn.danger { background: rgba(239,68,68,.18); border-color: rgba(239,68,68,.35); }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 
-/* DRAWER SIDENAV */
-.backdrop{
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,.45);
-  z-index: 40;
-}
-.drawer{
-  position: fixed;
-  top: 0; left: 0;
-  width: 290px;
-  height: 100vh;
-  background: #0b0d12;
-  border-right: 1px solid rgba(255,255,255,.08);
-  transform: translateX(-100%);
-  transition: transform .2s ease;
-  z-index: 50;
-  overflow: auto;
-}
-.drawer.open{ transform: translateX(0); }
-
-.drawer-head{
-  display:flex; align-items:center; justify-content:space-between;
-  padding: 12px 12px;
-  border-bottom: 1px solid rgba(255,255,255,.08);
-}
-.drawer-title{ color: rgba(255,255,255,.9); font-weight: 800; font-size: 13px; letter-spacing: .3px; }
-.drawer-close{
-  width: 34px; height: 34px;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.06);
-  color: rgba(255,255,255,.95);
-  cursor: pointer;
-}
-
-/* RESPONSIVE */
 @media (max-width: 980px) {
   .content { grid-template-columns: 1fr; }
   .select { min-width: 220px; }
