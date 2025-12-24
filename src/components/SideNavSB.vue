@@ -1,50 +1,55 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue'
-import { RouterLink } from 'vue-router'
+import { computed, onMounted, onBeforeUnmount, watch, ref } from 'vue'
+import { useRoute, RouterLink } from 'vue-router'
 
-const props = defineProps({
-  modelValue: {
-    type: Boolean,
-    default: false
-  }
-})
+const props = defineProps({ modelValue: { type: Boolean, required: true } })
+const emit  = defineEmits(['update:modelValue'])
 
-const emit = defineEmits(['update:modelValue'])
-
-const open = computed({
+const route = useRoute()
+const isOpen = computed({
   get: () => props.modelValue,
-  set: (val) => emit('update:modelValue', val)
+  set: v => emit('update:modelValue', v)
 })
+function close(){ isOpen.value = false }
 
-const close = () => {
-  open.value = false
-}
+function onKey(e){ if (e.key === 'Escape') close() }
 
-// --- ROLE HANDLING ---
+// ====== ROLE HANDLING (admin / promoter / customer) ======
 const role = ref('customer')
 
-// helper API sederhana (sama pola dengan dashboard)
 const RAW_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:3001').replace(/\/+$/, '')
 const API_HOST = RAW_BASE.replace(/\/api$/i, '')
 const wallet = () => (localStorage.getItem('walletAddress') || '').toString()
 
 async function loadRole () {
+  const w = wallet()
+  if (!w) {
+    role.value = 'customer'
+    return
+  }
   try {
     const res = await fetch(`${API_HOST}/api/me`, {
       headers: {
         'content-type': 'application/json',
-        'x-wallet-address': wallet()
+        'x-wallet-address': w
       }
     })
     if (!res.ok) return
     const data = await res.json().catch(() => ({}))
     role.value = data?.role || 'customer'
-  } catch (e) {
-    console.error('Failed to load role in SideNavSB:', e)
+  } catch (err) {
+    console.error('SideNavSB: failed to load role', err)
+    role.value = 'customer'
   }
 }
 
-onMounted(loadRole)
+// lifecycle
+onMounted(() => {
+  window.addEventListener('keydown', onKey)
+  loadRole()
+})
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+watch(() => route.fullPath, close)
 </script>
 
 <template>
@@ -54,6 +59,8 @@ onMounted(loadRole)
     <div class="drawer-panel" role="dialog" aria-modal="true" @click.stop>
       <nav class="mini-nav" aria-label="Main">
         <RouterLink class="link" active-class="active" to="/home"    @click="close">Home</RouterLink>
+
+        <!-- Hanya admin -->
         <RouterLink
           v-if="role === 'admin'"
           class="link"
@@ -63,8 +70,8 @@ onMounted(loadRole)
         >
           Admin Dashboard
         </RouterLink>
-        
-        <!-- Hanya promoter yang bisa melihat link Promoter Dashboard -->
+
+        <!-- Hanya promoter -->
         <RouterLink
           v-if="role === 'promoter'"
           class="link"
@@ -74,6 +81,7 @@ onMounted(loadRole)
         >
           Promoter Dashboard
         </RouterLink>
+
         <RouterLink class="link" active-class="active" to="/profile" @click="close">Profile</RouterLink>
         <RouterLink class="link" active-class="active" to="/wallet"  @click="close">Wallet</RouterLink>
         <RouterLink class="link" active-class="active" to="/history" @click="close">History</RouterLink>
