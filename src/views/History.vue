@@ -2,10 +2,10 @@
 import '@/assets/history.css'
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
-import SideNavSB from '@/components/SideNavSB.vue'
+import Drawer from '@/components/DrawerNav.vue'
 import Tiket_Download from '@/components/Tiket_Download.vue'
 
-/* ── Drawer / sidebar ─────────────────────────────────────────────────── */
+/* ── sidebar ─────────────────────────────────────────────────── */
 const route = useRoute()
 const sidebarOpen = ref(false)
 const toggleSidebar = () => (sidebarOpen.value = !sidebarOpen.value)
@@ -143,20 +143,21 @@ async function api (path, init) {
 
 /* ── LOAD dari ledger backend (Supabase) ───────────────────────────────── */
 async function loadLedgerPurchases () {
-  // backend: GET /api/transactions → difilter oleh wallet x-wallet-address 
+  // backend: GET /api/transactions → difilter oleh wallet x-wallet-address
   const list = await api('/api/transactions')
   const items = (Array.isArray(list) ? list : [])
     .filter(x => (x?.kind || '').toLowerCase() === 'purchase')
     .map(x => {
       const createdIso = x.created_at
-      const ticketId = (x.ticket_id || x.ticket_no || x.ref_id || x.id || '').toString()
+      const ticketId = (x.id || '').toString()
+      const booking = ticketId.replace(/-/g, '').slice(0, 16)
 
       return {
         _sortAt: +new Date(createdIso),
         id: x.id,
         title: 'Ticket purchase',
         date: fmtDate(createdIso),
-        booking: ticketId.slice(0, 16),
+        booking,
         price: fmtIdr(x.amount),
         status: x.status || 'Successful',
 
@@ -320,7 +321,7 @@ onUnmounted(() => {
     </header>
 
     <!-- posisikan sidebar di kanan atas -->
-    <SideNavSB v-model="sidebarOpen" extraClass="sb-topright" />
+    <Drawer v-model="sidebarOpen" extraClass="sb-topright" />
 
     <main class="wrap">
       <h2 class="section-title">Riwayat Tiket</h2>

@@ -552,7 +552,7 @@ onUnmounted(() => {
 
 .kv:last-child { border-bottom: none; }
 
-.k { font-weight: 700; color: #F4F1DE; font-size: 14px; }
+.k { font-weight: 700; color: #2b1c08; font-size: 14px; }
 .v { color: #111; font-size: 14px; }
 
 .mono {
