@@ -1,6 +1,8 @@
 <script setup>
-import { RouterView } from 'vue-router'
+import { RouterView, useRoute } from 'vue-router'
 import AppFooter from '@/components/AppFooter.vue'
+
+const route = useRoute()
 </script>
 
 <template>
@@ -8,6 +10,7 @@ import AppFooter from '@/components/AppFooter.vue'
     <main class="app-main">
       <RouterView />
     </main>
+
     <!-- footer tidak tampil di login (/) dan scan (/scan) -->
     <AppFooter v-if="route.path !== '/' && route.path !== '/scan'" />
   </div>

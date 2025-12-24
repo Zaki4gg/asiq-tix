@@ -33,6 +33,15 @@ const promoterTxHash = ref('')
 const contractOwner = ref('')
 const contractOwnerError = ref('')
 
+// Wallet (MetaMask) connection (Polygonscan-like: connect only when needed)
+const walletConnectError = ref('')
+const walletConnecting = ref(false)
+
+const connectedWalletLink = computed(() => {
+  if (!account.value) return ''
+  return `${EXPLORER_BASE}/address/${account.value}`
+})
+
 const promoterAddressLink = computed(() =>
   promoterNormalized.value ? `${EXPLORER_BASE}/address/${promoterNormalized.value}` : ''
 )
@@ -63,6 +72,38 @@ function getReadProvider () {
 function getReadContract () {
   if (!TICKETS_CONTRACT) throw new Error('VITE_TICKETS_CONTRACT belum diset di .env')
   return new ethers.Contract(TICKETS_CONTRACT, ASIQTIX_TICKETS_ABI, getReadProvider())
+}
+
+// Silent sync: read connected accounts without prompting
+async function syncWalletSilent () {
+  walletConnectError.value = ''
+  try {
+    if (!window?.ethereum?.request) return
+    const accs = await window.ethereum.request({ method: 'eth_accounts' })
+    if (Array.isArray(accs) && accs[0]) account.value = accs[0]
+  } catch (e) {
+    // jangan ganggu UX untuk silent sync
+    console.warn('syncWalletSilent error:', e)
+  }
+}
+
+// Explicit connect: prompts MetaMask
+async function connectWallet () {
+  walletConnectError.value = ''
+  walletConnecting.value = true
+  try {
+    if (!window?.ethereum?.request) {
+      walletConnectError.value = 'MetaMask tidak terdeteksi. Install/aktifkan MetaMask extension.'
+      return
+    }
+    const accs = await window.ethereum.request({ method: 'eth_requestAccounts' })
+    if (Array.isArray(accs) && accs[0]) account.value = accs[0]
+  } catch (e) {
+    console.error(e)
+    walletConnectError.value = e?.message || 'Gagal connect wallet.'
+  } finally {
+    walletConnecting.value = false
+  }
 }
 
 async function loadContractOwner () {
@@ -118,9 +159,9 @@ async function setPromoterOnchain (active) {
     promoterCheckError.value = 'Alamat wallet tidak valid.'
     return
   }
-  if (!window?.ethereum) {
+  if (!window?.ethereum?.request) {
     promoterCheckError.value =
-      'MetaMask tidak terdeteksi. Untuk menambah/menghapus promoter, Anda harus memakai MetaMask.'
+      'MetaMask tidak terdeteksi. Untuk menambah/menghapus promoter, Anda harus memakai MetaMask extension.'
     return
   }
   if (!TICKETS_CONTRACT) {
@@ -137,7 +178,12 @@ async function setPromoterOnchain (active) {
 
   promoterActionLoading.value = true
   try {
+    // Pastikan wallet connect (Polygonscan-style: prompt only on write)
+    if (!account.value) await connectWallet()
+
+    // Pastikan chain Amoy (tidak auto-reload karena kita tidak pakai connect() dari composable di sini)
     await ensureChain('amoy')
+
     const provider = new ethers.BrowserProvider(window.ethereum)
     const signer = await provider.getSigner()
     const c = new ethers.Contract(TICKETS_CONTRACT, ASIQTIX_TICKETS_ABI, signer)
@@ -281,6 +327,7 @@ onMounted(async () => {
   if (role.value === 'admin') {
     await loadEvents()
     await loadContractOwner()
+    await syncWalletSilent()
   }
 })
 </script>
@@ -409,6 +456,7 @@ onMounted(async () => {
               {{ TICKETS_CONTRACT }}
             </a>
           </div>
+
           <div class="row" v-if="contractOwner">
             <span class="k">Owner</span>
             <a
@@ -423,7 +471,26 @@ onMounted(async () => {
               {{ isConnectedWalletOwner ? 'Wallet Admin = Owner' : 'Wallet Admin ≠ Owner' }}
             </span>
           </div>
-          <p v-if="!isConnectedWalletOwner" class="hint">
+
+          <div class="row">
+            <span class="k">Wallet</span>
+            <template v-if="account">
+              <a class="mono link" :href="connectedWalletLink" target="_blank" rel="noreferrer">
+                {{ account }}
+              </a>
+            </template>
+            <template v-else>
+              <span class="mono">Belum connect</span>
+            </template>
+
+            <button class="btn ghost" @click="connectWallet" :disabled="walletConnecting">
+              {{ walletConnecting ? 'Connecting…' : 'Connect Wallet' }}
+            </button>
+          </div>
+
+          <p v-if="walletConnectError" class="error">{{ walletConnectError }}</p>
+
+          <p v-if="!isConnectedWalletOwner && account" class="hint">
             Catatan: fungsi <span class="mono">setPromoter</span> biasanya hanya bisa dipanggil oleh
             <span class="mono">owner</span>. Jika wallet admin Anda bukan owner, transaksi kemungkinan
             <span class="mono">revert</span>.
