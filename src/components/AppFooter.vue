@@ -1,11 +1,23 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import '@/assets/footer.css'
 
-const route = useRoute()
+// Hardening: kalau injection router tidak ada, jangan sampai app crash
+let route = null
+try {
+  route = useRoute()
+} catch {
+  route = null
+}
 
 // Sembunyikan footer di login (/) dan scan (/scan)
-const hidden = computed(() => route.path === '/' || route.path === '/scan')
+// (tetap dukung /login kalau suatu saat Anda pakai path itu)
+const hidden = computed(() => {
+  const p = route?.path || ''
+  const n = route?.name || ''
+  return n === 'login' || p === '/' || p === '/scan' || p === '/login'
+})
 
 const year = new Date().getFullYear()
 const brand = 'AsiqIt'
@@ -32,16 +44,14 @@ const offices = [
         <nav class="socials" aria-label="social links">
           <a href="https://www.instagram.com/bagas.y0/" aria-label="Instagram" class="ico">
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.9.2 2.4.4.6.2 1 .4 1.5.8.4.3.7.8.8 1.5.2.5.3 1.2.4 2.4.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.9-.4 2.4-.2.6-.4 1-.8 1.5-.3.4-.8.7-1.5.8-.5.2-1.2.3-2.4.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.9-.2-2.4-.4-.6-.2-1-.4-1.5-.8-.4-.3-.7-.8-.8-1.5-.2-.5-.3-1.2-.4-2.4C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.2-1.9.4-2.4.2-.6.4-1 .8-1.5.3-.4.8-.7 1.5-.8.5-.2 1.2-.3 2.4-.4C8.4 2.2 8.8 2.2 12 2.2Zm0 1.8c-3.1 0-3.5 0-4.7.1-1.1.1-1.7.2-2.1.4-.5.2-.8.4-1.1.7-.3.3-.5.6-.7 1.1-.2.4-.3 1-.4 2.1-.1 1.2-.1 1.6-.1 4.7s0 3.5.1 4.7c.1 1.1.2 1.7.4 2.1.2.5.4.8.7 1.1.3.3.6.5 1.1.7.4.2 1 .3 2.1.4 1.2.1 1.6.1 4.7.1s3.5 0 4.7-.1c1.1-.1 1.7-.2 2.1-.4.5-.2.8-.4 1.1-.7.3-.3.5-.6.7-1.1.2-.4.3-1 .4-2.1.1-1.2.1-1.6.1-4.7s0-3.5-.1-4.7c-.1-1.1-.2-1.7-.4-2.1-.2-.5-.4-.8-.7-1.1-.3-.3-.6-.5-1.1-.7-.4-.2-1-.3-2.1-.4-1.2-.1-1.6-.1-4.7-.1Zm0 3.4a6.6 6.6 0 1 1 0 13.2 6.6 6.6 0 0 1 0-13.2Zm0 2a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2Zm5-2.2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/>
+              <path d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.9.2 2.4.4.6.2 1 .4 1.5.8.4.3.7.8.8 1.5.2.5.3 1.2.4 2.4.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.9-.4 2.4-.2.6-.4 1-.8 1.5-.3.4-.8.7-1.5.8-.5.2-1.2.3-2.4.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.9-.2-2.4-.4-.6-.2-1-.4-1.5-.8-.4-.3-.7-.8-.8-1.5-.2-.5-.3-1.2-.4-2.4C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.2-1.9.4-2.4.2-.6.4-1 .8-1.5.3-.4.8-.7 1.5-.8.5-.2 1.2-.3 2.4-.4C8.4 2.2 8.8 2.2 12 2.2Zm0 1.8c-3.1 0-3.5 0-4.7.1-1.1.1-1.7.2-2.1.4-.5.2-.8.4-1.1.7-.3.3-.5.6-.7 1.1-.2.4-.3 1-.4 2.1-.1 1.2-.1 1.6-.1 4.7s0 3.5.1 4.7c.1 1.1.2 1.7.4 2.1.2.5.4.8.7 1.1.3.3.6.5 1.1.7.4.2 1 .3 2.1.4 1.2.1 1.6.1 4.7.1s3.5 0 4.7-.1c1.1-.1 1.7-.2 2.1-.4.5-.2.8-.4 1.1-.7.3-.3.5-.6.7-1.1.2-.4.3-1 .4-2.1.1-1.2.1-1.6.1-4.7s0-3.5-.1-4.7c-.1-1.1-.2-1.7-.4-2.1-.2-.5-.4-.8-.7-1.1-.3-.3-.6-.5-1.1-.7-.4-.2-1-.3-2.1-.4-1.2-.1-1.6-.1-4.7-.1Z"/>
             </svg>
           </a>
-
           <a href="https://web.facebook.com/profile.php?id=100010487190698" aria-label="Facebook" class="ico">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M13.5 22v-8h2.7l.4-3h-3.1V8.6c0-.9.2-1.6 1.6-1.6h1.7V4.3c-.3 0-1.3-.1-2.5-.1-2.5 0-4.1 1.5-4.1 4.2V11H8.3v3h2.9v8h2.3Z"/>
             </svg>
           </a>
-
           <a href="https://www.tiktok.com/@bagaspp253" aria-label="Tiktok" class="ico">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12.67 2h2.53c.12 1.1.44 2.02 1.09 2.89.63.84 1.47 1.35 2.53 1.55v2.56c-.96-.02-1.86-.23-2.71-.65-.42-.2-.82-.45-1.22-.72l-.01 6.7c0 1.15-.23 2.22-.83 3.2a6.08 6.08 0 0 1-4.18 2.94c-.77.14-1.52.14-2.27-.05-1.65-.42-2.9-1.36-3.72-2.85-1.26-2.31-.98-5.2.69-7.22 1.28-1.52 2.93-2.24 4.93-2.21v2.66c-.52.02-1 .1-1.45.32-1.03.48-1.62 1.3-1.75 2.42-.18 1.5.67 2.86 2.03 3.3 1.72.56 3.59-.48 3.93-2.26.05-.26.07-.54.07-.81l.02-11.52Z"/>
@@ -65,77 +75,3 @@ const offices = [
     </div>
   </footer>
 </template>
-
-<style scoped>
-.site-footer{
-  --bg: #f0b35a;
-  --ink: #1f2850;
-  --muted: #28345f;
-  --ring: rgba(0,0,0,.12);
-
-  background: var(--bg);
-  color: var(--ink);
-  border-top: 2px solid var(--ink);
-  box-shadow: 0 -6px 24px rgba(0,0,0,.18) inset;
-}
-
-.site-footer .footer-inner{
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 18px clamp(16px, 5vw, 32px);
-  display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr 1fr;
-  gap: clamp(16px, 3vw, 32px);
-  align-items: start;
-}
-
-.footer-title{
-  margin: 0 0 8px 0;
-  font-weight: 900;
-  letter-spacing: .5px;
-  font-size: clamp(18px, 2.8vw, 28px);
-}
-.brand-cell .socials{
-  display: inline-flex; gap: 10px; margin: 4px 0 12px;
-}
-.brand-cell .ico{
-  width: 34px; height: 34px; border-radius: 8px;
-  display:grid; place-items:center;
-  background: rgba(0,0,0,.10);
-  border:1px solid var(--ring);
-  transition: transform .1s ease, background .2s ease;
-}
-.brand-cell .ico:hover{ transform: translateY(-1px); background: rgba(0,0,0,.16); }
-.brand-cell .ico svg{ width: 18px; height: 18px; fill: var(--ink); }
-
-.copy{
-  display:block; margin-top: 8px;
-  font-size: 12px; opacity: .9;
-}
-
-.office-cell .city{
-  margin: 0 0 8px 0;
-  font-size: 12px; letter-spacing: .6px; font-weight: 900;
-}
-.office-cell .email,
-.office-cell .tel{
-  display:block; text-decoration: none; color: var(--ink);
-  font-size: 12px; font-weight: 700; margin: 2px 0;
-}
-.office-cell .email:hover,
-.office-cell .tel:hover{ text-decoration: underline; }
-
-.office-cell .addr{
-  margin-top: 4px; font-style: normal; font-size: 11.5px; line-height: 1.3;
-  display:flex; flex-direction: column;
-  color: var(--muted);
-}
-
-@media (max-width: 900px){
-  .site-footer .footer-inner{ grid-template-columns: 1fr 1fr; }
-}
-@media (max-width: 600px){
-  .site-footer .footer-inner{ grid-template-columns: 1fr; }
-  .brand-cell{ order: -1; }
-}
-</style>
