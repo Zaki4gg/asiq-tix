@@ -239,12 +239,12 @@ onUnmounted(() => {
     <div class="page">
       <!-- HEADER CUMAN HAMBURGER DOANG -->
       <header class="topbar">
+        <h1 class="title">Scan Ticket QR</h1>
         <button class="hamburger" type="button" aria-label="Toggle menu" @click="toggleSidebar">
           <span></span>
           <span></span>
           <span></span>
         </button>
-        <h1 class="title">Scan Ticket QR</h1>
       </header>
 
       <main class="content">
@@ -352,38 +352,37 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.layout { min-height: 100vh; background: #0b0d12; }
+.layout { min-height: 100vh; background: #F4F1DE; }
 .page { max-width: 1200px; margin: 0 auto; padding: 16px; }
 
 /* HEADER - CUMAN HAMBURGER */
-.topbar {
+.topbar{
   position: sticky; top: 0; z-index: 50;
-  background: rgba(11,13,18,.9);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,.08);
+  background: #F4F1DE;
   border-radius: 14px;
   padding: 14px 18px;
-  display: flex;
-  align-items: center;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start; /* penting */
   gap: 16px;
   margin-bottom: 16px;
 }
 
-.hamburger {
+.hamburger{
+  margin-left: auto; /* ini yang bikin dia ke kanan ujung */
   width: 46px;
   height: 46px;
   flex-shrink: 0;
   border-radius: 12px;
-  border: 1px solid rgba(255,255,255,.2);
-  background: rgba(255,255,255,.1);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+  border: 1px solid rgba(0,0,0,.15);
+  background: rgba(255,255,255,.6);
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
   gap: 5px;
   padding: 0;
   cursor: pointer;
-  transition: all .2s ease;
 }
 
 .hamburger:hover {
@@ -391,20 +390,20 @@ onUnmounted(() => {
   border-color: rgba(255,255,255,.35);
 }
 
-.hamburger span {
-  display: block;
+.hamburger span{
+  display:block;
   width: 22px;
   height: 3px;
-  background: #fff;
+  background: #2b1c08;
   border-radius: 2px;
 }
 
-.title {
+.title{
   margin: 0;
   font-size: 20px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.3px;
+  font-weight: 800;
+  color: #2b1c08;
+  letter-spacing: .3px;
 }
 
 .content { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -553,7 +552,7 @@ onUnmounted(() => {
 
 .kv:last-child { border-bottom: none; }
 
-.k { font-weight: 700; color: #111; font-size: 14px; }
+.k { font-weight: 700; color: #F4F1DE; font-size: 14px; }
 .v { color: #111; font-size: 14px; }
 
 .mono {
@@ -604,7 +603,7 @@ onUnmounted(() => {
 }
 
 .k2 { font-weight: 700; color: #111; font-size: 14px; }
-.v2 { color: #111; font-size: 14px; }
+.v2 { color: #F4F1DE; font-size: 14px; }
 
 .btn {
   padding: 11px 16px;
