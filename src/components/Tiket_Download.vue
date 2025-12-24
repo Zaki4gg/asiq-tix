@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import QRCode from 'qrcode'
 
 const props = defineProps({
   // id event di database (ref_id di tabel transactions)
@@ -7,7 +8,7 @@ const props = defineProps({
     type: [String, Number],
     default: null
   },
-  // kode tiket / booking (boleh dari ref_id, ticket_id, dll)
+  // kode tiket / booking (kalau tidak pakai transactionId, bisa isi UUID transaksi di sini)
   ticketCode: {
     type: String,
     default: ''
@@ -28,13 +29,24 @@ const props = defineProps({
   fallbackBannerUrl: {
     type: String,
     default: ''
+  },
+  // ✅ id transaksi (uuid) dari Supabase
+  transactionId: {
+    type: String,
+    default: ''
+  },
+
+  // (opsional) kalau Anda sudah punya halaman verify sendiri:
+  // contoh: https://asiqtixutama.vercel.app/verify?tx=...
+  verifyBaseUrl: {
+    type: String,
+    default: ''
   }
 })
 
 const loading = ref(false)
 
 const RAW_BASE = (import.meta.env?.VITE_API_BASE || 'http://localhost:3001').replace(/\/+$/, '')
-// asumsi backend seperti yg lain: base + /api/...
 const API_BASE = `${RAW_BASE}/api`
 
 function fmtTicketDate (input) {
@@ -87,6 +99,16 @@ function drawRoundedRect (ctx, x, y, width, height, radius) {
   ctx.closePath()
 }
 
+function safeCompactId (id) {
+  return String(id || '').replace(/-/g, '').toUpperCase()
+}
+
+function shortForDisplay (id, len = 16) {
+  const s = safeCompactId(id)
+  if (!s) return '-'
+  return s.length <= len ? s : s.slice(0, len)
+}
+
 async function handleClick () {
   if (loading.value) return
   loading.value = true
@@ -109,14 +131,31 @@ async function handleClick () {
     const dateIso = meta?.date_iso || null
     const bannerUrl = meta?.image_url || meta?.poster_url || meta?.banner_url || props.fallbackBannerUrl || ''
     const timeText = fmtTicketDate(dateIso || props.fallbackDate)
-    const ticketId = props.ticketCode || meta?.id || props.eventId || '-'
+
+    // ✅ ticketId utama: UUID transaksi
+    const ticketId = props.transactionId || props.ticketCode || '-'
+
+    // 2) Generate QR payload
+    // Prioritas: verifyBaseUrl dari props → kalau kosong gunakan origin + /verify
+    const baseVerify = (props.verifyBaseUrl || '').trim()
+    const origin = (typeof window !== 'undefined' && window.location?.origin) ? window.location.origin : ''
+    const verifyUrl = baseVerify || (origin ? `${origin}/verify` : '')
+    const qrPayload = (ticketId && ticketId !== '-' && verifyUrl)
+      ? `${verifyUrl}?tx=${encodeURIComponent(ticketId)}`
+      : (ticketId && ticketId !== '-' ? String(ticketId) : '')
+
+    const qrDataUrl = qrPayload
+      ? await QRCode.toDataURL(qrPayload, { width: 260, margin: 1 })
+      : ''
 
     await generateTicketImage({
       title,
       location,
       timeText,
       ticketId,
-      bannerUrl
+      bannerUrl,
+      qrDataUrl,
+      qrPayload
     })
   } catch (e) {
     console.error('[TicketDownloadButton] gagal generate tiket', e)
@@ -126,7 +165,7 @@ async function handleClick () {
   }
 }
 
-async function generateTicketImage ({ title, location, timeText, ticketId, bannerUrl }) {
+async function generateTicketImage ({ title, location, timeText, ticketId, bannerUrl, qrDataUrl, qrPayload }) {
   const width = 1200
   const height = 560
 
@@ -206,7 +245,10 @@ async function generateTicketImage ({ title, location, timeText, ticketId, banne
   const yTime = yPlace + lineHeight * 1.1
 
   ctx.fillText('ID', textX, yId)
-  ctx.fillText(String(ticketId), textX + 140, yId)
+
+  // tampilkan versi ringkas biar tidak kepanjangan
+  const idShown = (ticketId && ticketId !== '-') ? shortForDisplay(ticketId, 24) : '-'
+  ctx.fillText(String(idShown), textX + 140, yId)
 
   ctx.fillText('TEMPAT', textX, yPlace)
   ctx.fillText(location || '-', textX + 140, yPlace)
@@ -214,14 +256,51 @@ async function generateTicketImage ({ title, location, timeText, ticketId, banne
   ctx.fillText('WAKTU', textX, yTime)
   ctx.fillText(timeText || '-', textX + 140, yTime)
 
+  // ----- QR CODE (kanan bawah) -----
+  if (qrDataUrl) {
+    const qrImg = new Image()
+    qrImg.src = qrDataUrl
+
+    await new Promise(resolve => {
+      qrImg.onload = () => resolve(true)
+      qrImg.onerror = () => resolve(false)
+    })
+
+    const qrSize = 200
+    const qrX = cardX + cardW - padding - qrSize
+    const qrY = cardY + cardH - padding - qrSize
+
+    // background putih agar QR kontras
+    ctx.save()
+    drawRoundedRect(ctx, qrX - 12, qrY - 12, qrSize + 24, qrSize + 24, 18)
+    ctx.fillStyle = '#ffffff'
+    ctx.fill()
+    ctx.restore()
+
+    ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize)
+
+    // label kecil (opsional)
+    ctx.fillStyle = textColor
+    ctx.font = '16px "Segoe UI", system-ui, -apple-system, sans-serif'
+    ctx.fillText('SCAN', qrX + 70, qrY - 18)
+
+    // (opsional) tampilkan payload ringkas agar petugas bisa cek manual
+    if (qrPayload) {
+      ctx.font = '14px "Segoe UI", system-ui, -apple-system, sans-serif'
+      const payloadShown = String(qrPayload).length > 32 ? String(qrPayload).slice(0, 32) + '…' : String(qrPayload)
+      ctx.fillText(payloadShown, qrX - 220, qrY + qrSize + 26)
+    }
+  }
+
   // ----- trigger download -----
   const safeTitle = String(title)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 
+  const fileId = shortForDisplay(ticketId, 16) || 'ticket'
   const link = document.createElement('a')
-  link.download = `ticket-${safeTitle || 'asiqtix'}-${ticketId}.png`
+  link.download = `ticket-${safeTitle || 'asiqtix'}-${fileId}.png`
   link.href = canvas.toDataURL('image/png')
   document.body.appendChild(link)
   link.click()
@@ -240,5 +319,3 @@ async function generateTicketImage ({ title, location, timeText, ticketId, banne
     <span v-else>DOWNLOAD TICKET</span>
   </button>
 </template>
-
-

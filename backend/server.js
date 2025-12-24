@@ -261,7 +261,7 @@ app.get('/api/me', requireAddress, async (req, res) => {
   // 1. kalau ada di tabel admins → selalu admin
   const admin = await isAdmin(addr)
   if (admin) {
-    return res.json({ address: addr, role: 'admin' })      
+    return res.json({ address: addr, role: 'admin' })
   }
 
   try {
@@ -431,7 +431,7 @@ app.post('/api/events', requireAddress, async (req, res) => {
   if (error) return res.status(500).json({ error: error.message })
   res.status(201).json(data)
 })
-  
+
 app.put('/api/events/:id', requireAddress, async (req, res) => {
   const wallet = req.walletAddress
   const user = await ensureUserRow(wallet) // dari step 4
@@ -502,7 +502,7 @@ app.delete('/api/events/:id', requireAddress, async (req, res) => {
   if (!isAdmin && !isOwner) {
     return res.status(403).json({ error: 'bukan_admin_atau_pemilik_event' }) // 'not_event_owner'
   }
-  
+
   const { error } = await supabase
     .from('events')
     .delete()
@@ -654,6 +654,56 @@ app.get(['/api/transactions', '/transactions'], requireAddress, async (req, res)
   res.json(data)
 })
 
+
+// Buat Scan Kode QR
+// PROMOTER ONLY: verify ticket by transaction UUID (from QR)
+app.get('/api/tickets/verify/:txId', requireAddress, requireRole(['promoter']), async (req, res) => {
+  const wallet = req.walletAddress // promotor yg request
+  const txId = String(req.params.txId)
+  const expectedEventId = req.query.eventId ? String(req.query.eventId) : null
+
+  // 1) Ambil transaksi
+  const { data: tx, error: txErr } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('id', txId)
+    .maybeSingle()
+
+  if (txErr) return res.status(500).json({ error: txErr.message })
+  if (!tx) return res.status(404).json({ error: 'ticket_not_found' })
+
+  // Optional tapi bagus: pastikan ini memang pembelian tiket
+  if (String(tx.kind || '').toLowerCase() !== 'purchase') {
+    return res.status(400).json({ error: 'not_a_ticket_purchase' })
+  }
+
+  // 2) Transaksi harus punya ref_id (event id)
+  const eventId = tx.ref_id
+  if (!eventId) return res.status(400).json({ error: 'ticket_has_no_event' })
+
+  // 3) Ambil event
+  const { data: ev, error: evErr } = await supabase
+    .from('events')
+    .select('id,title,date_iso,venue,image_url,promoter_wallet')
+    .eq('id', eventId)
+    .maybeSingle()
+
+  if (evErr) return res.status(500).json({ error: evErr.message })
+  if (!ev) return res.status(404).json({ error: 'event_not_found' })
+
+  // 4) HARD RULE: promotor hanya boleh scan event miliknya
+  if (String(ev.promoter_wallet || '').toLowerCase() !== wallet) {
+    return res.status(403).json({ error: 'forbidden_not_your_event' })
+  }
+
+  // 5) (Opsional) kalau halaman scan memilih event tertentu, pastikan cocok
+  if (expectedEventId && expectedEventId !== String(ev.id)) {
+    return res.status(403).json({ error: 'forbidden_wrong_event' })
+  }
+
+  return res.json({ ok: true, tx, event: ev })
+})
+
 // POST topup — alias /api/topup dan /topup
 app.post(['/api/topup', '/topup'], requireAddress, async (req, res) => {
   const parsed = topupSchema.safeParse(req.body)
@@ -675,7 +725,7 @@ app.post(['/api/purchase', '/purchase'], requireAddress, async (req, res) => {
 
   const addr = req.walletAddress
   const { amount, ref_id, description, tx_hash } = parsed.data
-  
+
   if (ref_id) {
     const { data: ev, error: evErr } = await supabase
       .from('events')
@@ -712,7 +762,7 @@ app.post(['/api/purchase', '/purchase'], requireAddress, async (req, res) => {
     // finalAmount = Number(ev.price_idr)  // finalAmount = Number(ev.price_pol) diganti 25-11-2025
   }
   // let finalAmount = Number(amount)
-  
+
   const tx = {
     wallet: addr,
     kind: 'purchase',
@@ -722,17 +772,17 @@ app.post(['/api/purchase', '/purchase'], requireAddress, async (req, res) => {
     status: 'confirmed',
     tx_hash: tx_hash || null
   }
-  
+
   const { data, error } = await supabase
   .from('transactions')
   .insert(tx)
   .select()
   .single()
-  
+
   if (error) {
     return res.status(500).json({ error: error.message })
   }
-  
+
   emitTx(addr, data)
   res.json({ ok: true, tx: data })
 
