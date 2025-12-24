@@ -1,17 +1,15 @@
 <script setup>
 import { RouterView } from 'vue-router'
-import AppFooter from '@/components/AppFooter.vue'   // ⟵ tambahkan
+import AppFooter from '@/components/AppFooter.vue'
 </script>
 
 <template>
-  <!-- Shell flex agar footer “nempel” di bawah untuk halaman pendek -->
   <div id="app" class="app-shell">
     <main class="app-main">
       <RouterView />
     </main>
-
-    <!-- Footer tampil di semua halaman kecuali login -->
-    <AppFooter />
+    <!-- footer tidak tampil di login (/) dan scan (/scan) -->
+    <AppFooter v-if="route.path !== '/' && route.path !== '/scan'" />
   </div>
 </template>
 

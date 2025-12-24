@@ -286,7 +286,9 @@ onUnmounted(() => {
 .title { margin:0; font-size:20px; }
 .actions { display:flex; gap:8px; }
 .content { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
-.camera, .result { background:#fff; border-radius:12px; padding:16px; border:1px solid #eee; }
+.camera, .result { background:#fff; border-radius:12px; padding:16px; border:1px solid #eee;   color: #0b0d12;}
+.camera h2, .result h2, .label, .k {  color: #0b0d12; }
+.hint { color: #555; }
 .row { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
 .label { font-weight:600; }
 .select { padding:8px; border-radius:8px; border:1px solid #ddd; min-width:260px; }
