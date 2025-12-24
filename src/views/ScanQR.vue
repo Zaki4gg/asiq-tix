@@ -23,6 +23,7 @@ const eventMeta = ref(null)
 const errorMsg = ref('')
 const infoMsg = ref('')
 
+/** SIDENAV DRAWER */
 const sidebarOpen = ref(false)
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
@@ -31,6 +32,7 @@ function closeSidebar() {
   sidebarOpen.value = false
 }
 
+/** STATUS UI */
 const statusLabel = computed(() => {
   if (verifyStatus.value === 'valid') return 'VALID'
   if (verifyStatus.value === 'used') return 'SUDAH DIPAKAI'
@@ -44,6 +46,7 @@ const statusClass = computed(() => {
   return ''
 })
 
+/** QR */
 const reader = new BrowserQRCodeReader()
 let controls = null
 
@@ -94,6 +97,13 @@ function parseTxIdFromQr(text) {
   return raw
 }
 
+/**
+ * SCAN = REDEEM (sekali pakai)
+ * Backend: POST /api/tickets/scan { tx_id }
+ * - 200: scanned (valid & berhasil)
+ * - 409: already_scanned (tidak valid lagi)
+ * - 403: bukan promoter / bukan event miliknya
+ */
 async function scanTicketRedeem(id) {
   tx.value = null
   eventMeta.value = null
@@ -183,7 +193,7 @@ async function startScan() {
       videoEl.value,
       async (result) => {
         if (!result) return
-        if (!scanning.value) return // guard
+        if (!scanning.value) return
 
         const text = result.getText()
         decodedText.value = text
@@ -239,14 +249,24 @@ onUnmounted(() => {
 
 <template>
   <div class="layout">
-    <!-- Sidebar (optional) -->
-    <SideNavSB v-if="sidebarOpen" class="sidenav" @click.self="closeSidebar" />
+    <!-- Backdrop + Drawer Sidebar -->
+    <div v-if="sidebarOpen" class="backdrop" @click="closeSidebar"></div>
 
+    <aside class="drawer" :class="{ open: sidebarOpen }" aria-label="Sidebar">
+      <div class="drawer-head">
+        <div class="drawer-title">Menu</div>
+        <button class="drawer-close" type="button" aria-label="Close sidebar" @click="closeSidebar">✕</button>
+      </div>
+      <!-- SideNav content -->
+      <SideNavSB />
+    </aside>
+
+    <!-- Page -->
     <div class="page">
       <header class="topbar">
         <div class="left">
-          <button class="icon-btn" aria-label="Toggle menu" @click="toggleSidebar">
-            <span /><span /><span />
+          <button class="hamburger" type="button" aria-label="Toggle menu" @click="toggleSidebar">
+            <span></span><span></span><span></span>
           </button>
           <div class="titles">
             <h1 class="title">Scan Ticket QR</h1>
@@ -279,19 +299,16 @@ onUnmounted(() => {
           <div class="video-wrap">
             <video ref="videoEl" class="video" autoplay playsinline muted></video>
 
-            <!-- overlay state -->
             <div v-if="!scanning && !processing" class="overlay">
               Klik <strong>Start</strong> untuk mulai scan
             </div>
 
-            <!-- scan reticle -->
             <div class="reticle" aria-hidden="true">
               <span class="corner tl" /><span class="corner tr" />
               <span class="corner bl" /><span class="corner br" />
               <div v-if="scanning" class="scanline" />
             </div>
 
-            <!-- badge -->
             <div class="badge" :class="{ on: scanning, busy: processing }">
               <span v-if="processing">processing</span>
               <span v-else-if="scanning">scanning</span>
@@ -299,9 +316,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <p class="hint">
-            Catatan: akses kamera umumnya hanya berjalan di HTTPS atau localhost.
-          </p>
+          <p class="hint">Catatan: akses kamera umumnya hanya berjalan di HTTPS atau localhost.</p>
         </section>
 
         <section class="panel">
@@ -333,9 +348,7 @@ onUnmounted(() => {
           </div>
 
           <div v-if="tx" class="card">
-            <div class="card-head">
-              <h3>Detail Transaksi</h3>
-            </div>
+            <div class="card-head"><h3>Detail Transaksi</h3></div>
             <div class="grid">
               <div class="k2">ID</div><div class="v2 mono">{{ tx.id }}</div>
               <div class="k2">Kind</div><div class="v2">{{ tx.kind }}</div>
@@ -358,9 +371,7 @@ onUnmounted(() => {
           </div>
 
           <div v-if="eventMeta" class="card">
-            <div class="card-head">
-              <h3>Detail Event</h3>
-            </div>
+            <div class="card-head"><h3>Detail Event</h3></div>
             <div class="grid">
               <div class="k2">Title</div><div class="v2">{{ eventMeta.title }}</div>
               <div class="k2">Date</div><div class="v2">{{ eventMeta.date_iso }}</div>
@@ -376,9 +387,11 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* BASE */
 .layout { min-height: 100vh; background: #0b0d12; }
 .page { max-width: 1200px; margin: 0 auto; padding: 16px; }
 
+/* TOPBAR */
 .topbar {
   position: sticky; top: 0; z-index: 5;
   background: rgba(11,13,18,.85);
@@ -394,21 +407,25 @@ onUnmounted(() => {
 .title { margin:0; font-size: 18px; color: #fff; letter-spacing: .2px; }
 .subtitle { margin: 2px 0 0; font-size: 12px; color: rgba(255,255,255,.65); }
 
-.icon-btn {
-  width: 38px; height: 38px; border-radius: 12px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.06);
-  display:flex; flex-direction: column; justify-content:center; gap:4px;
-  padding: 0 10px; cursor: pointer;
+.hamburger{
+  width: 42px; height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.15);
+  background: rgba(255,255,255,.08);
+  display:flex; flex-direction:column; justify-content:center;
+  gap:4px; padding:0 10px;
+  cursor:pointer;
 }
-.icon-btn span { display:block; height:2px; background: rgba(255,255,255,.85); border-radius: 99px; }
+.hamburger span{
+  display:block; height:2px;
+  background: rgba(255,255,255,.9);
+  border-radius:999px;
+}
 
 .actions { display:flex; gap:8px; flex-wrap: wrap; justify-content:flex-end; }
 
-.content {
-  display:grid; grid-template-columns: 1fr 1fr;
-  gap:16px;
-}
+/* CONTENT */
+.content { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
 
 .panel {
   background: #fff;
@@ -417,10 +434,7 @@ onUnmounted(() => {
   border: 1px solid #eee;
   color: #0b0d12;
 }
-.panel-head {
-  display:flex; align-items:center; justify-content:space-between; gap:12px;
-  margin-bottom: 10px;
-}
+.panel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 10px; }
 .panel h2 { margin:0; font-size: 15px; }
 .inline { display:flex; gap:8px; align-items:center; }
 .right-actions { display:flex; gap:8px; }
@@ -431,6 +445,7 @@ onUnmounted(() => {
   background: #fff;
 }
 
+/* VIDEO */
 .video-wrap {
   position: relative;
   width: 100%;
@@ -441,7 +456,6 @@ onUnmounted(() => {
   border: 1px solid rgba(0,0,0,.15);
 }
 .video { width:100%; height:100%; object-fit: cover; }
-
 .overlay {
   position:absolute; inset:0;
   display:flex; align-items:center; justify-content:center;
@@ -484,15 +498,12 @@ onUnmounted(() => {
 
 .hint { color:#666; margin: 10px 0 0; font-size: 13px; }
 
+/* RESULT */
 .alert { padding: 10px 12px; border-radius: 12px; margin-bottom: 12px; border: 1px solid #eee; }
 .alert.info { background: #f6f6f6; }
 .alert.error { background: #ffecec; border-color: #ffd0d0; }
 
-.summary {
-  border: 1px solid #eee;
-  border-radius: 14px;
-  padding: 10px 12px;
-}
+.summary { border: 1px solid #eee; border-radius: 14px; padding: 10px 12px; }
 .kv {
   display:grid; grid-template-columns: 140px 1fr;
   gap: 10px;
@@ -502,12 +513,10 @@ onUnmounted(() => {
 .kv:last-child { border-bottom: none; }
 .k { font-weight: 700; color: #111; }
 .v { color: #111; }
-
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   word-break: break-all;
 }
-
 .pill {
   display:inline-block; padding: 6px 10px; border-radius: 999px;
   background:#f0f0f0; font-weight: 900; font-size: 12px;
@@ -526,15 +535,11 @@ onUnmounted(() => {
 }
 .card-head { display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; }
 .card h3 { margin: 0; font-size: 14px; }
-
-.grid {
-  display:grid;
-  grid-template-columns: 140px 1fr;
-  gap: 8px 10px;
-}
+.grid { display:grid; grid-template-columns: 140px 1fr; gap: 8px 10px; }
 .k2 { font-weight: 700; color: #111; }
 .v2 { color: #111; }
 
+/* BUTTONS */
 .btn {
   padding: 9px 12px;
   border-radius: 12px;
@@ -549,6 +554,42 @@ onUnmounted(() => {
 .btn.danger { background: rgba(239,68,68,.18); border-color: rgba(239,68,68,.35); }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 
+/* DRAWER SIDENAV */
+.backdrop{
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 40;
+}
+.drawer{
+  position: fixed;
+  top: 0; left: 0;
+  width: 290px;
+  height: 100vh;
+  background: #0b0d12;
+  border-right: 1px solid rgba(255,255,255,.08);
+  transform: translateX(-100%);
+  transition: transform .2s ease;
+  z-index: 50;
+  overflow: auto;
+}
+.drawer.open{ transform: translateX(0); }
+
+.drawer-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 12px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.drawer-title{ color: rgba(255,255,255,.9); font-weight: 800; font-size: 13px; letter-spacing: .3px; }
+.drawer-close{
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.95);
+  cursor: pointer;
+}
+
+/* RESPONSIVE */
 @media (max-width: 980px) {
   .content { grid-template-columns: 1fr; }
   .select { min-width: 220px; }
