@@ -87,7 +87,7 @@ function showStatus(m, t) {
 function shortenAddress(a) { return a ? `${a.slice(0,6)}...${a.slice(-4)}` : '' }
 
 /* ------------------------------ Fetch util ------------------------------ */
-/** 
+/**
  * Tahan-banting: coba ABSOLUTE (VITE_API_BASE) lalu fallback ke path relatif (proxy Vite).
  * Isi VITE_API_BASE=http://localhost:3001 pada front-end jika ingin direct ke backend.
  * Kosongkan VITE_API_BASE untuk menggunakan proxy Vite (server.proxy di vite.config.js).
