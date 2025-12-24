@@ -51,6 +51,7 @@
             <div class="k">Status</div>
             <div class="v">
               <span v-if="verifyStatus === 'valid'" class="pill ok">VALID</span>
+              <span v-else-if="verifyStatus === 'used'" class="pill bad">SUDAH DIPAKAI</span>
               <span v-else-if="verifyStatus === 'invalid'" class="pill bad">INVALID</span>
               <span v-else class="pill">—</span>
             </div>
@@ -66,6 +67,15 @@
               <div><strong>Amount</strong></div><div>{{ tx.amount }}</div>
               <div><strong>Created</strong></div><div>{{ tx.created_at }}</div>
               <div><strong>Event Ref</strong></div><div class="mono">{{ tx.ref_id || '—' }}</div>
+
+              <div v-if="tx.scanned !== undefined"><strong>Scanned</strong></div>
+              <div v-if="tx.scanned !== undefined">{{ String(tx.scanned) }}</div>
+
+              <div v-if="tx.scanned_at"><strong>Scanned At</strong></div>
+              <div v-if="tx.scanned_at" class="mono">{{ tx.scanned_at }}</div>
+
+              <div v-if="tx.scanned_by"><strong>Scanned By</strong></div>
+              <div v-if="tx.scanned_by" class="mono">{{ tx.scanned_by }}</div>
             </div>
           </div>
 
@@ -103,7 +113,7 @@ const selectedDeviceId = ref('')
 
 const decodedText = ref('')
 const txId = ref('')
-const verifyStatus = ref('') // '', 'valid', 'invalid'
+const verifyStatus = ref('') // '', 'valid', 'used', 'invalid'
 const tx = ref(null)
 const eventMeta = ref(null)
 
@@ -113,9 +123,12 @@ const infoMsg = ref('')
 const reader = new BrowserQRCodeReader()
 let controls = null
 
+function wallet() {
+  return (localStorage.getItem('walletAddress') || '').toString().toLowerCase().trim()
+}
+
 function pickDefaultCamera(list) {
   if (!Array.isArray(list) || list.length === 0) return ''
-  // coba pilih “back/rear/environment” kalau ada
   const preferred = list.find(d => /back|rear|environment/i.test(d.label || ''))
   return (preferred || list[0]).deviceId
 }
@@ -129,7 +142,6 @@ async function refreshCameras() {
     if (!selectedDeviceId.value) {
       selectedDeviceId.value = pickDefaultCamera(cameras.value)
     } else {
-      // kalau device yang dipilih hilang, fallback ke default
       const stillExists = cameras.value.some(d => d.deviceId === selectedDeviceId.value)
       if (!stillExists) selectedDeviceId.value = pickDefaultCamera(cameras.value)
     }
@@ -142,7 +154,7 @@ function parseTxIdFromQr(text) {
   const raw = String(text || '').trim()
   if (!raw) return ''
 
-  // 1) Kalau berupa URL dengan ?tx=...
+  // 1) URL dengan ?tx=...
   try {
     if (/^https?:\/\//i.test(raw)) {
       const u = new URL(raw)
@@ -153,51 +165,81 @@ function parseTxIdFromQr(text) {
     // ignore
   }
 
-  // 2) Kalau langsung UUID
+  // 2) UUID langsung
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
   if (uuidRe.test(raw)) return raw
 
-  // 3) fallback: pakai raw apa adanya (misalnya Anda encode token)
+  // 3) fallback (kalau kamu encode token lain)
   return raw
 }
 
-async function verifyTransaction(id) {
+/**
+ * SCAN = REDEEM (sekali pakai)
+ * Backend: POST /api/tickets/scan { tx_id }
+ * - 200: scanned (valid & berhasil)
+ * - 409: already_scanned (tidak valid lagi)
+ * - 403: bukan promoter / bukan event miliknya
+ */
+async function scanTicketRedeem(id) {
   tx.value = null
   eventMeta.value = null
   verifyStatus.value = ''
   errorMsg.value = ''
-  infoMsg.value = 'Memverifikasi tiket…'
+  infoMsg.value = 'Memproses scan tiket…'
+
+  const w = wallet()
+  if (!w) {
+    verifyStatus.value = 'invalid'
+    infoMsg.value = ''
+    errorMsg.value = 'Wallet tidak ditemukan. Login/koneksikan MetaMask dulu.'
+    return
+  }
 
   try {
-    const res = await fetch(`${API_BASE}/transactions/${encodeURIComponent(id)}`)
+    const res = await fetch(`${API_BASE}/tickets/scan`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-wallet-address': w
+      },
+      body: JSON.stringify({ tx_id: id })
+    })
+
     const data = await res.json().catch(() => null)
 
-    if (!res.ok || !data?.tx) {
-      verifyStatus.value = 'invalid'
+    // Tiket sudah pernah dipakai
+    if (res.status === 409) {
+      verifyStatus.value = 'used'
       infoMsg.value = ''
-      errorMsg.value = data?.error || data?.message || 'Transaksi tidak ditemukan.'
+      errorMsg.value = data?.message || 'Tiket ini sudah di-scan dan tidak valid lagi.'
+      tx.value = data?.tx || null
+      eventMeta.value = data?.event || null
       return
     }
 
-    tx.value = data.tx
-    verifyStatus.value = 'valid'
-    infoMsg.value = 'Tiket valid.'
-
-    // Optional: ambil event meta kalau ada ref_id
-    if (data.tx.ref_id) {
-      const evRes = await fetch(`${API_BASE}/events/${encodeURIComponent(data.tx.ref_id)}`)
-      const evData = await evRes.json().catch(() => null)
-      if (evRes.ok && evData) eventMeta.value = evData
+    // Error lain (403/404/400)
+    if (!res.ok) {
+      verifyStatus.value = 'invalid'
+      infoMsg.value = ''
+      errorMsg.value = data?.error || data?.message || 'Scan gagal.'
+      return
     }
+
+    // Sukses scan
+    verifyStatus.value = 'valid'
+    infoMsg.value = data?.message || 'Tiket valid. Scan berhasil.'
+    tx.value = data?.tx || null
+    eventMeta.value = data?.event || null
   } catch {
     verifyStatus.value = 'invalid'
     infoMsg.value = ''
-    errorMsg.value = 'Gagal verifikasi. Cek koneksi atau endpoint backend.'
+    errorMsg.value = 'Gagal scan. Cek koneksi atau endpoint backend.'
   }
 }
 
 async function startScan() {
   if (scanning.value) return
+
   errorMsg.value = ''
   infoMsg.value = ''
   decodedText.value = ''
@@ -223,25 +265,24 @@ async function startScan() {
       selectedDeviceId.value || undefined,
       videoEl.value,
       async (result) => {
-        // result akan ada saat berhasil decode
-        if (result) {
-          const text = result.getText()
-          decodedText.value = text
+        if (!result) return
 
-          const id = parseTxIdFromQr(text)
-          txId.value = id
+        const text = result.getText()
+        decodedText.value = text
 
-          // stop setelah 1 scan (biar tidak spam)
-          stopScan()
+        const id = parseTxIdFromQr(text)
+        txId.value = id
 
-          if (id) await verifyTransaction(id)
-          else {
-            verifyStatus.value = 'invalid'
-            infoMsg.value = ''
-            errorMsg.value = 'QR terbaca, tapi tidak ada TX ID yang valid.'
-          }
+        // stop setelah 1 scan (hindari spam)
+        stopScan()
+
+        if (id) {
+          await scanTicketRedeem(id)
+        } else {
+          verifyStatus.value = 'invalid'
+          infoMsg.value = ''
+          errorMsg.value = 'QR terbaca, tapi tidak ada Transaction ID yang valid.'
         }
-        // err biasanya NotFoundException saat belum menemukan QR; abaikan
       }
     )
   } catch {
@@ -253,9 +294,7 @@ async function startScan() {
 
 function stopScan() {
   if (controls) {
-    try { controls.stop() } catch {
-      // ignore
-    }
+    try { controls.stop() } catch { /* ignore */ }
     controls = null
   }
   scanning.value = false
@@ -286,31 +325,51 @@ onUnmounted(() => {
 .title { margin:0; font-size:20px; }
 .actions { display:flex; gap:8px; }
 .content { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
-.camera, .result { background:#fff; border-radius:12px; padding:16px; border:1px solid #eee;   color: #0b0d12;}
-.camera h2, .result h2, .label, .k {  color: #0b0d12; }
+
+.camera, .result {
+  background:#fff;
+  border-radius:12px;
+  padding:16px;
+  border:1px solid #eee;
+  color: #0b0d12;
+}
+.camera h2, .result h2, .label, .k { color: #0b0d12; }
 .hint { color: #555; }
+
 .row { display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
 .label { font-weight:600; }
 .select { padding:8px; border-radius:8px; border:1px solid #ddd; min-width:260px; }
+
 .video-wrap { position:relative; width:100%; aspect-ratio: 16/9; background:#111; border-radius:12px; overflow:hidden; }
 .video { width:100%; height:100%; object-fit:cover; }
 .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; background:rgba(0,0,0,.35); }
+
 .hint { color:#666; margin:10px 0 0; font-size:13px; }
+
 .alert { background:#f6f6f6; padding:10px; border-radius:10px; margin-bottom:12px; }
 .alert.error { background:#ffecec; }
+
 .box { border:1px solid #eee; border-radius:12px; padding:12px; }
 .kv { display:grid; grid-template-columns: 140px 1fr; gap:10px; padding:8px 0; border-bottom:1px dashed #eee; }
 .kv:last-child { border-bottom:none; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; word-break:break-all; }
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  word-break:break-all;
+}
+
 .pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#f0f0f0; font-weight:700; font-size:12px; }
 .pill.ok { background:#e7ffef; }
 .pill.bad { background:#ffe7e7; }
+
 .tx { margin-top:14px; }
 .grid { display:grid; grid-template-columns: 140px 1fr; gap:8px 10px; }
+
 .btn { padding:8px 12px; border-radius:10px; border:1px solid #ddd; background:#fff; cursor:pointer; }
 .btn.secondary { background:#f8f8f8; }
 .btn.danger { background:#ffecec; border-color:#ffbcbc; }
 .btn:disabled { opacity:.6; cursor:not-allowed; }
+
 @media (max-width: 900px) {
   .content { grid-template-columns: 1fr; }
 }

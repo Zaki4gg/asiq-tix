@@ -654,6 +654,90 @@ app.get(['/api/transactions', '/transactions'], requireAddress, async (req, res)
   res.json(data)
 })
 
+const scanTicketSchema = z.object({
+  tx_id: z.string().uuid()
+})
+
+// PROMOTER ONLY: scan/redeem tiket (sekali pakai)
+app.post('/api/tickets/scan', requireAddress, requireRole(['promoter']), async (req, res) => {
+  const promoterWallet = req.walletAddress
+  const parsed = scanTicketSchema.safeParse(req.body)
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid_payload', detail: parsed.error.flatten() })
+  }
+
+  const txId = parsed.data.tx_id
+
+  // 1) Ambil transaksi
+  const { data: tx, error: txErr } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('id', txId)
+    .maybeSingle()
+
+  if (txErr) return res.status(500).json({ error: txErr.message })
+  if (!tx) return res.status(404).json({ error: 'ticket_not_found' })
+
+  // 2) Pastikan ini transaksi pembelian tiket & punya event
+  if (String(tx.kind || '').toLowerCase() !== 'purchase') {
+    return res.status(400).json({ error: 'not_a_ticket_purchase' })
+  }
+  if (!tx.ref_id) {
+    return res.status(400).json({ error: 'ticket_has_no_event' })
+  }
+
+  // 3) Ambil event dan pastikan event milik promoter yg login
+  const { data: ev, error: evErr } = await supabase
+    .from('events')
+    .select('id,title,venue,date_iso,promoter_wallet')
+    .eq('id', tx.ref_id)
+    .maybeSingle()
+
+  if (evErr) return res.status(500).json({ error: evErr.message })
+  if (!ev) return res.status(404).json({ error: 'event_not_found' })
+
+  if (String(ev.promoter_wallet || '').toLowerCase() !== String(promoterWallet).toLowerCase()) {
+    return res.status(403).json({ error: 'forbidden_not_your_event' })
+  }
+
+  // 4) UPDATE ATOMIK: hanya sukses kalau scanned masih false
+  const nowIso = new Date().toISOString()
+
+  const { data: updatedRows, error: updErr } = await supabase
+    .from('transactions')
+    .update({
+      scanned: true,
+      scanned_at: nowIso,
+      scanned_by: promoterWallet
+    })
+    .eq('id', txId)
+    .eq('scanned', false) // kunci anti double-scan
+    .select()
+
+  if (updErr) return res.status(500).json({ error: updErr.message })
+
+  // tidak ada row ter-update => sudah pernah di-scan
+  if (!updatedRows || updatedRows.length === 0) {
+    return res.status(409).json({
+      ok: false,
+      status: 'already_scanned',
+      message: 'Tiket ini sudah di-scan dan tidak valid lagi.',
+      tx: { id: tx.id, ref_id: tx.ref_id, scanned: true, scanned_at: tx.scanned_at, scanned_by: tx.scanned_by },
+      event: ev
+    })
+  }
+
+  return res.json({
+    ok: true,
+    status: 'scanned',
+    message: 'Tiket valid. Scan berhasil.',
+    tx: updatedRows[0],
+    event: ev
+  })
+})
+
+
 
 // Buat Scan Kode QR
 // PROMOTER ONLY: verify ticket by transaction UUID (from QR)
