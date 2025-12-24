@@ -1,106 +1,7 @@
-<template>
-  <div class="scan-page">
-    <header class="topbar">
-      <h1 class="title">Scan Ticket QR</h1>
-      <div class="actions">
-        <button class="btn" :disabled="scanning" @click="startScan">Start</button>
-        <button class="btn danger" :disabled="!scanning" @click="stopScan">Stop</button>
-      </div>
-    </header>
-
-    <main class="content">
-      <section class="camera">
-        <div class="row">
-          <label class="label">Camera</label>
-          <select class="select" v-model="selectedDeviceId" :disabled="scanning || cameras.length === 0">
-            <option v-for="c in cameras" :key="c.deviceId" :value="c.deviceId">
-              {{ c.label || `Camera ${c.deviceId.slice(0, 6)}…` }}
-            </option>
-          </select>
-          <button class="btn secondary" :disabled="scanning" @click="refreshCameras">Refresh</button>
-        </div>
-
-        <div class="video-wrap">
-          <video ref="videoEl" class="video" autoplay playsinline muted></video>
-          <div v-if="!scanning" class="overlay">Klik Start untuk mulai scan</div>
-        </div>
-
-        <p class="hint">
-          Catatan: akses kamera umumnya hanya berjalan di HTTPS atau localhost.
-        </p>
-      </section>
-
-      <section class="result">
-        <h2>Hasil</h2>
-
-        <div v-if="errorMsg" class="alert error">{{ errorMsg }}</div>
-        <div v-else-if="infoMsg" class="alert">{{ infoMsg }}</div>
-
-        <div class="box">
-          <div class="kv">
-            <div class="k">QR Text</div>
-            <div class="v mono">{{ decodedText || '—' }}</div>
-          </div>
-
-          <div class="kv">
-            <div class="k">Transaction ID</div>
-            <div class="v mono">{{ txId || '—' }}</div>
-          </div>
-
-          <div class="kv">
-            <div class="k">Status</div>
-            <div class="v">
-              <span v-if="verifyStatus === 'valid'" class="pill ok">VALID</span>
-              <span v-else-if="verifyStatus === 'used'" class="pill bad">SUDAH DIPAKAI</span>
-              <span v-else-if="verifyStatus === 'invalid'" class="pill bad">INVALID</span>
-              <span v-else class="pill">—</span>
-            </div>
-          </div>
-
-          <div v-if="tx" class="tx">
-            <h3>Detail Transaksi</h3>
-            <div class="grid">
-              <div><strong>ID</strong></div><div class="mono">{{ tx.id }}</div>
-              <div><strong>Kind</strong></div><div>{{ tx.kind }}</div>
-              <div><strong>Status</strong></div><div>{{ tx.status }}</div>
-              <div><strong>Wallet</strong></div><div class="mono">{{ tx.wallet }}</div>
-              <div><strong>Amount</strong></div><div>{{ tx.amount }}</div>
-              <div><strong>Created</strong></div><div>{{ tx.created_at }}</div>
-              <div><strong>Event Ref</strong></div><div class="mono">{{ tx.ref_id || '—' }}</div>
-
-              <div v-if="tx.scanned !== undefined"><strong>Scanned</strong></div>
-              <div v-if="tx.scanned !== undefined">{{ String(tx.scanned) }}</div>
-
-              <div v-if="tx.scanned_at"><strong>Scanned At</strong></div>
-              <div v-if="tx.scanned_at" class="mono">{{ tx.scanned_at }}</div>
-
-              <div v-if="tx.scanned_by"><strong>Scanned By</strong></div>
-              <div v-if="tx.scanned_by" class="mono">{{ tx.scanned_by }}</div>
-            </div>
-          </div>
-
-          <div v-if="eventMeta" class="tx">
-            <h3>Detail Event</h3>
-            <div class="grid">
-              <div><strong>Title</strong></div><div>{{ eventMeta.title }}</div>
-              <div><strong>Date</strong></div><div>{{ eventMeta.date_iso }}</div>
-              <div><strong>Venue</strong></div><div>{{ eventMeta.venue }}</div>
-              <div><strong>ID</strong></div><div class="mono">{{ eventMeta.id }}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="row">
-          <button class="btn secondary" @click="reset">Reset</button>
-        </div>
-      </section>
-    </main>
-  </div>
-</template>
-
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { BrowserQRCodeReader } from '@zxing/browser'
+import SideNavSB from '@/components/SideNavSB.vue'
 
 const RAW_BASE = (import.meta.env?.VITE_API_BASE || 'http://localhost:3001').replace(/\/+$/, '')
 const API_BASE = `${RAW_BASE}/api`
@@ -318,6 +219,113 @@ onUnmounted(() => {
   stopScan()
 })
 </script>
+
+<template>
+  <div class="scan-page">
+    <header class="topbar">
+      <h1 class="title">Scan Ticket QR</h1>
+      <div class="actions">
+        <button class="btn" :disabled="scanning" @click="startScan">Start</button>
+        <button class="btn danger" :disabled="!scanning" @click="stopScan">Stop</button>
+        <button class="hamburger" aria-label="Toggle menu" @click="toggleSidebar">
+        <span /><span /><span />
+      </button>
+      </div>
+    </header>
+    
+    <!-- posisikan sidebar di kanan atas -->
+    <SideNavSB v-model="sidebarOpen" extraClass="sb-topright" />
+
+    <main class="content">
+      <section class="camera">
+        <div class="row">
+          <label class="label">Camera</label>
+          <select class="select" v-model="selectedDeviceId" :disabled="scanning || cameras.length === 0">
+            <option v-for="c in cameras" :key="c.deviceId" :value="c.deviceId">
+              {{ c.label || `Camera ${c.deviceId.slice(0, 6)}…` }}
+            </option>
+          </select>
+          <button class="btn secondary" :disabled="scanning" @click="refreshCameras">Refresh</button>
+        </div>
+
+        <div class="video-wrap">
+          <video ref="videoEl" class="video" autoplay playsinline muted></video>
+          <div v-if="!scanning" class="overlay">Klik Start untuk mulai scan</div>
+        </div>
+
+        <p class="hint">
+          Catatan: akses kamera umumnya hanya berjalan di HTTPS atau localhost.
+        </p>
+      </section>
+
+      <section class="result">
+        <h2>Hasil</h2>
+
+        <div v-if="errorMsg" class="alert error">{{ errorMsg }}</div>
+        <div v-else-if="infoMsg" class="alert">{{ infoMsg }}</div>
+
+        <div class="box">
+          <div class="kv">
+            <div class="k">QR Text</div>
+            <div class="v mono">{{ decodedText || '—' }}</div>
+          </div>
+
+          <div class="kv">
+            <div class="k">Transaction ID</div>
+            <div class="v mono">{{ txId || '—' }}</div>
+          </div>
+
+          <div class="kv">
+            <div class="k">Status</div>
+            <div class="v">
+              <span v-if="verifyStatus === 'valid'" class="pill ok">VALID</span>
+              <span v-else-if="verifyStatus === 'used'" class="pill bad">SUDAH DIPAKAI</span>
+              <span v-else-if="verifyStatus === 'invalid'" class="pill bad">INVALID</span>
+              <span v-else class="pill">—</span>
+            </div>
+          </div>
+
+          <div v-if="tx" class="tx">
+            <h3>Detail Transaksi</h3>
+            <div class="grid">
+              <div><strong>ID</strong></div><div class="mono">{{ tx.id }}</div>
+              <div><strong>Kind</strong></div><div>{{ tx.kind }}</div>
+              <div><strong>Status</strong></div><div>{{ tx.status }}</div>
+              <div><strong>Wallet</strong></div><div class="mono">{{ tx.wallet }}</div>
+              <div><strong>Amount</strong></div><div>{{ tx.amount }}</div>
+              <div><strong>Created</strong></div><div>{{ tx.created_at }}</div>
+              <div><strong>Event Ref</strong></div><div class="mono">{{ tx.ref_id || '—' }}</div>
+
+              <div v-if="tx.scanned !== undefined"><strong>Scanned</strong></div>
+              <div v-if="tx.scanned !== undefined">{{ String(tx.scanned) }}</div>
+
+              <div v-if="tx.scanned_at"><strong>Scanned At</strong></div>
+              <div v-if="tx.scanned_at" class="mono">{{ tx.scanned_at }}</div>
+
+              <div v-if="tx.scanned_by"><strong>Scanned By</strong></div>
+              <div v-if="tx.scanned_by" class="mono">{{ tx.scanned_by }}</div>
+            </div>
+          </div>
+
+          <div v-if="eventMeta" class="tx">
+            <h3>Detail Event</h3>
+            <div class="grid">
+              <div><strong>Title</strong></div><div>{{ eventMeta.title }}</div>
+              <div><strong>Date</strong></div><div>{{ eventMeta.date_iso }}</div>
+              <div><strong>Venue</strong></div><div>{{ eventMeta.venue }}</div>
+              <div><strong>ID</strong></div><div class="mono">{{ eventMeta.id }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <button class="btn secondary" @click="reset">Reset</button>
+        </div>
+      </section>
+    </main>
+  </div>
+</template>
+
 
 <style scoped>
 .scan-page { padding: 16px; }
