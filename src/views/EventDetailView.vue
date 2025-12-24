@@ -518,7 +518,11 @@ onMounted(async () => {
       <button class="back" @click="backToHome">← Back</button>
       <div class="brand"><img src="/logo_with_text.png" alt="Tickety" /></div>
       <h1 class="title">Event</h1>
-      <button class="hamburger" aria-label="Toggle menu" @click="toggleSidebar"></button>
+      <button class="hamburger" aria-label="Toggle menu" @click="toggleSidebar">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
     </header>
 
     <SideNavSB v-model="sidebarOpen" extraClass="sb-topright" />

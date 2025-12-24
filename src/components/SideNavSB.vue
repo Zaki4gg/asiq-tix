@@ -1,21 +1,50 @@
 <script setup>
-import { computed, onMounted, onBeforeUnmount, watch } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { computed, ref, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 
-const props = defineProps({ modelValue: { type: Boolean, required: true } })
-const emit  = defineEmits(['update:modelValue'])
-
-const route = useRoute()
-const isOpen = computed({
-  get: () => props.modelValue,
-  set: v => emit('update:modelValue', v)
+const props = defineProps({
+  modelValue: {
+    type: Boolean,
+    default: false
+  }
 })
-function close(){ isOpen.value = false }
 
-function onKey(e){ if (e.key === 'Escape') close() }
-onMounted(() => window.addEventListener('keydown', onKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
-watch(() => route.fullPath, close)
+const emit = defineEmits(['update:modelValue'])
+
+const open = computed({
+  get: () => props.modelValue,
+  set: (val) => emit('update:modelValue', val)
+})
+
+const close = () => {
+  open.value = false
+}
+
+// --- ROLE HANDLING ---
+const role = ref('customer')
+
+// helper API sederhana (sama pola dengan dashboard)
+const RAW_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:3001').replace(/\/+$/, '')
+const API_HOST = RAW_BASE.replace(/\/api$/i, '')
+const wallet = () => (localStorage.getItem('walletAddress') || '').toString()
+
+async function loadRole () {
+  try {
+    const res = await fetch(`${API_HOST}/api/me`, {
+      headers: {
+        'content-type': 'application/json',
+        'x-wallet-address': wallet()
+      }
+    })
+    if (!res.ok) return
+    const data = await res.json().catch(() => ({}))
+    role.value = data?.role || 'customer'
+  } catch (e) {
+    console.error('Failed to load role in SideNavSB:', e)
+  }
+}
+
+onMounted(loadRole)
 </script>
 
 <template>
@@ -25,6 +54,26 @@ watch(() => route.fullPath, close)
     <div class="drawer-panel" role="dialog" aria-modal="true" @click.stop>
       <nav class="mini-nav" aria-label="Main">
         <RouterLink class="link" active-class="active" to="/home"    @click="close">Home</RouterLink>
+        <RouterLink
+          v-if="role === 'admin'"
+          class="link"
+          active-class="active"
+          to="/admin/dashboard"
+          @click="close"
+        >
+          Admin Dashboard
+        </RouterLink>
+        
+        <!-- Hanya promoter yang bisa melihat link Promoter Dashboard -->
+        <RouterLink
+          v-if="role === 'promoter'"
+          class="link"
+          active-class="active"
+          to="/promoter/dashboard"
+          @click="close"
+        >
+          Promoter Dashboard
+        </RouterLink>
         <RouterLink class="link" active-class="active" to="/profile" @click="close">Profile</RouterLink>
         <RouterLink class="link" active-class="active" to="/wallet"  @click="close">Wallet</RouterLink>
         <RouterLink class="link" active-class="active" to="/history" @click="close">History</RouterLink>
