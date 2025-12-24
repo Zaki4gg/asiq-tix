@@ -366,7 +366,7 @@ onUnmounted(() => {
 
 .topbar {
   position: sticky; top: 0; z-index: 5;
-  background: rgba(11,13,18,.85);
+  background: #f4f1de;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255,255,255,.06);
   border-radius: 14px;
