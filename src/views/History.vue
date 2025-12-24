@@ -2,7 +2,7 @@
 import '@/assets/history.css'
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
-import Drawer from '@/components/DrawerNav.vue'
+import SideNavSB from '@/components/SideNavSB.vue'
 import Tiket_Download from '@/components/Tiket_Download.vue'
 
 /* ── sidebar ─────────────────────────────────────────────────── */
@@ -321,7 +321,7 @@ onUnmounted(() => {
     </header>
 
     <!-- posisikan sidebar di kanan atas -->
-    <Drawer v-model="sidebarOpen" extraClass="sb-topright" />
+    <SideNavSB v-model="sidebarOpen" extraClass="sb-topright" />
 
     <main class="wrap">
       <h2 class="section-title">Riwayat Tiket</h2>
