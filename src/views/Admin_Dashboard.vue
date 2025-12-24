@@ -3,18 +3,167 @@ import '@/assets/home.css'
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import SideNavSB from '@/components/SideNavSB.vue'
+import { ethers } from 'ethers'
+import { useMetamask } from '@/composables/useMetamask'
+import { ASIQTIX_TICKETS_ABI } from '@/abi/asiqtixTicketsSimpleV3'
 
 const route = useRoute()
 const sidebarOpen = ref(false)
 const toggleSidebar = () => (sidebarOpen.value = !sidebarOpen.value)
 watch(() => route.fullPath, () => (sidebarOpen.value = false))
 
+// =========================
+// Admin: On-chain promoter management (Polygon Amoy)
+// =========================
+const { account, ensureChain } = useMetamask()
+const TICKETS_CONTRACT = import.meta.env.VITE_TICKETS_CONTRACT || ''
+const AMOY_RPC = import.meta.env.VITE_POLYGON_AMOY_RPC || 'https://rpc-amoy.polygon.technology'
+const EXPLORER_BASE = 'https://amoy.polygonscan.com'
+
+const promoterInput = ref('')
+const promoterNormalized = ref('')
+const promoterStatus = ref(null) // null | boolean
+const promoterCheckLoading = ref(false)
+const promoterCheckError = ref('')
+
+const promoterActionLoading = ref(false)
+const promoterActionMsg = ref('')
+const promoterTxHash = ref('')
+
+const contractOwner = ref('')
+const contractOwnerError = ref('')
+
+const promoterAddressLink = computed(() =>
+  promoterNormalized.value ? `${EXPLORER_BASE}/address/${promoterNormalized.value}` : ''
+)
+const promoterTxLink = computed(() =>
+  promoterTxHash.value ? `${EXPLORER_BASE}/tx/${promoterTxHash.value}` : ''
+)
+const isConnectedWalletOwner = computed(() => {
+  if (!contractOwner.value || !account.value) return false
+  return String(contractOwner.value).toLowerCase() === String(account.value).toLowerCase()
+})
+
+function normalizeAddress (value) {
+  const s = String(value || '').trim()
+  if (!s) return ''
+  try {
+    return ethers.getAddress(s)
+  } catch {
+    return ''
+  }
+}
+
+let _readProvider = null
+function getReadProvider () {
+  if (_readProvider) return _readProvider
+  _readProvider = new ethers.JsonRpcProvider(AMOY_RPC)
+  return _readProvider
+}
+function getReadContract () {
+  if (!TICKETS_CONTRACT) throw new Error('VITE_TICKETS_CONTRACT belum diset di .env')
+  return new ethers.Contract(TICKETS_CONTRACT, ASIQTIX_TICKETS_ABI, getReadProvider())
+}
+
+async function loadContractOwner () {
+  contractOwnerError.value = ''
+  contractOwner.value = ''
+  if (!TICKETS_CONTRACT) {
+    contractOwnerError.value = 'Alamat kontrak (VITE_TICKETS_CONTRACT) belum dikonfigurasi.'
+    return
+  }
+  try {
+    const c = getReadContract()
+    const owner = await c.owner()
+    contractOwner.value = String(owner || '')
+  } catch (e) {
+    console.error(e)
+    contractOwnerError.value = e?.message || 'Gagal mengambil owner kontrak.'
+  }
+}
+
+async function checkPromoterWallet () {
+  promoterCheckError.value = ''
+  promoterActionMsg.value = ''
+  promoterTxHash.value = ''
+  promoterStatus.value = null
+
+  const addr = normalizeAddress(promoterInput.value)
+  promoterNormalized.value = addr
+  if (!addr) {
+    promoterCheckError.value = 'Alamat wallet tidak valid.'
+    return
+  }
+  promoterCheckLoading.value = true
+  try {
+    const c = getReadContract()
+    const ok = await c.isPromoter(addr)
+    promoterStatus.value = !!ok
+  } catch (e) {
+    console.error(e)
+    promoterCheckError.value = e?.reason || e?.message || 'Gagal memeriksa status promoter.'
+  } finally {
+    promoterCheckLoading.value = false
+  }
+}
+
+async function setPromoterOnchain (active) {
+  promoterCheckError.value = ''
+  promoterActionMsg.value = ''
+  promoterTxHash.value = ''
+
+  const addr = normalizeAddress(promoterInput.value)
+  promoterNormalized.value = addr
+  if (!addr) {
+    promoterCheckError.value = 'Alamat wallet tidak valid.'
+    return
+  }
+  if (!window?.ethereum) {
+    promoterCheckError.value =
+      'MetaMask tidak terdeteksi. Untuk menambah/menghapus promoter, Anda harus memakai MetaMask.'
+    return
+  }
+  if (!TICKETS_CONTRACT) {
+    promoterCheckError.value = 'Alamat kontrak (VITE_TICKETS_CONTRACT) belum dikonfigurasi.'
+    return
+  }
+
+  const want = !!active
+  const label = want ? 'menambahkan' : 'menghapus'
+  const ok = window.confirm(
+    `Konfirmasi: ${label} promoter untuk wallet\n${addr}\n\nTransaksi akan muncul di MetaMask.`
+  )
+  if (!ok) return
+
+  promoterActionLoading.value = true
+  try {
+    await ensureChain('amoy')
+    const provider = new ethers.BrowserProvider(window.ethereum)
+    const signer = await provider.getSigner()
+    const c = new ethers.Contract(TICKETS_CONTRACT, ASIQTIX_TICKETS_ABI, signer)
+
+    const tx = await c.setPromoter(addr, want)
+    promoterTxHash.value = tx?.hash || ''
+    promoterActionMsg.value = 'Transaksi dikirim. Menunggu konfirmasi…'
+    await tx.wait()
+    promoterActionMsg.value = 'Berhasil. Status promoter sudah diperbarui di blockchain.'
+
+    await checkPromoterWallet()
+  } catch (e) {
+    console.error(e)
+    promoterActionMsg.value = ''
+    promoterCheckError.value = e?.reason || e?.shortMessage || e?.message || 'Transaksi gagal.'
+  } finally {
+    promoterActionLoading.value = false
+  }
+}
+
 // --- API helper (sama pola dengan EventDetailView) ---
 const RAW_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:3001').replace(/\/+$/, '')
 const API_HOST = RAW_BASE.replace(/\/api$/i, '')
 const wallet = () => (localStorage.getItem('walletAddress') || '').toString()
 
-async function api(path, options = {}) {
+async function api (path, options = {}) {
   const full = path.startsWith('/api') ? path : `/api${path.startsWith('/') ? path : `/${path}`}`
   const res = await fetch(`${API_HOST}${full}`, {
     ...options,
@@ -131,6 +280,7 @@ onMounted(async () => {
   await loadRole()
   if (role.value === 'admin') {
     await loadEvents()
+    await loadContractOwner()
   }
 })
 </script>
@@ -240,6 +390,94 @@ onMounted(async () => {
         </div>
       </section>
 
+      <section v-if="role === 'admin'" class="promoter-section">
+        <header class="table-header">
+          <h2>Manajemen Promoter (On-chain)</h2>
+        </header>
+
+        <p v-if="contractOwnerError" class="error">{{ contractOwnerError }}</p>
+
+        <div class="promoter-meta" v-if="TICKETS_CONTRACT">
+          <div class="row">
+            <span class="k">Contract</span>
+            <a
+              class="mono link"
+              :href="`${EXPLORER_BASE}/address/${TICKETS_CONTRACT}`"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {{ TICKETS_CONTRACT }}
+            </a>
+          </div>
+          <div class="row" v-if="contractOwner">
+            <span class="k">Owner</span>
+            <a
+              class="mono link"
+              :href="`${EXPLORER_BASE}/address/${contractOwner}`"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {{ contractOwner }}
+            </a>
+            <span class="pill" :class="isConnectedWalletOwner ? 'pill--green' : 'pill--gray'">
+              {{ isConnectedWalletOwner ? 'Wallet Admin = Owner' : 'Wallet Admin ≠ Owner' }}
+            </span>
+          </div>
+          <p v-if="!isConnectedWalletOwner" class="hint">
+            Catatan: fungsi <span class="mono">setPromoter</span> biasanya hanya bisa dipanggil oleh
+            <span class="mono">owner</span>. Jika wallet admin Anda bukan owner, transaksi kemungkinan
+            <span class="mono">revert</span>.
+          </p>
+        </div>
+
+        <div class="promoter-form">
+          <label class="lbl">Wallet Address</label>
+          <input
+            v-model="promoterInput"
+            class="inp mono"
+            placeholder="0x..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+
+          <div class="promoter-actions">
+            <button class="btn primary" @click="checkPromoterWallet" :disabled="promoterCheckLoading">
+              {{ promoterCheckLoading ? 'Checking…' : 'Check' }}
+            </button>
+            <button class="btn primary" @click="setPromoterOnchain(true)" :disabled="promoterActionLoading">
+              {{ promoterActionLoading ? 'Processing…' : 'Add Promoter' }}
+            </button>
+            <button class="btn ghost" @click="setPromoterOnchain(false)" :disabled="promoterActionLoading">
+              Remove Promoter
+            </button>
+          </div>
+
+          <p v-if="promoterCheckError" class="error">{{ promoterCheckError }}</p>
+          <p v-if="promoterActionMsg" class="ok">{{ promoterActionMsg }}</p>
+
+          <div v-if="promoterNormalized" class="promoter-result">
+            <div class="row">
+              <span class="k">Address</span>
+              <a class="mono link" :href="promoterAddressLink" target="_blank" rel="noreferrer">
+                {{ promoterNormalized }}
+              </a>
+            </div>
+            <div class="row" v-if="promoterStatus !== null">
+              <span class="k">Status</span>
+              <span class="pill" :class="promoterStatus ? 'pill--green' : 'pill--gray'">
+                {{ promoterStatus ? 'PROMOTER' : 'NOT PROMOTER' }}
+              </span>
+            </div>
+            <div class="row" v-if="promoterTxHash">
+              <span class="k">Tx</span>
+              <a class="mono link" :href="promoterTxLink" target="_blank" rel="noreferrer">
+                {{ promoterTxHash }}
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section v-if="role !== 'admin' && !loading" class="forbidden">
         <p class="error">Halaman ini hanya untuk admin.</p>
       </section>
@@ -315,6 +553,112 @@ onMounted(async () => {
   padding: 16px 18px;
 }
 
+.promoter-section {
+  background: rgba(15, 19, 27, 0.92);
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  padding: 16px 18px;
+}
+
+.promoter-meta {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.promoter-meta .row,
+.promoter-result .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.k {
+  width: 76px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.link {
+  color: inherit;
+  text-decoration: underline;
+  opacity: 0.95;
+}
+
+.hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.promoter-form {
+  display: grid;
+  gap: 10px;
+}
+
+.lbl {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.inp {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.18);
+  padding: 10px 12px;
+  color: var(--text);
+  outline: none;
+}
+
+.inp:focus {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.promoter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.btn {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #0f131b;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: #f4f1de;
+}
+
+.btn.ghost {
+  background: rgba(244, 241, 222, 0.18);
+  color: #f4f1de;
+  border: 1px solid rgba(244, 241, 222, 0.25);
+}
+
+.ok {
+  color: #bbf7d0;
+  font-size: 14px;
+  margin: 0;
+}
+
+.promoter-result {
+  margin-top: 4px;
+  display: grid;
+  gap: 10px;
+}
+
 .table-header {
   display: flex;
   align-items: center;
@@ -380,8 +724,8 @@ onMounted(async () => {
 }
 
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    'Liberation Mono', 'Courier New', monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
   font-size: 11px;
 }
 
