@@ -234,7 +234,6 @@ onUnmounted(() => {
 
 <template>
   <div class="layout">
-    <!-- IMPORTANT: SideNavSB wajib pakai v-model -->
     <SideNavSB v-model="sidebarOpen" />
 
     <div class="page">
@@ -251,10 +250,8 @@ onUnmounted(() => {
 
         <div class="actions">
           <button class="btn primary" :disabled="scanning || processing" @click="startScan">
-            {{ processing ? 'Processing…' : (scanning ? 'Scanning…' : 'Start') }}
+            {{ processing ? 'Processing…' : (scanning ? 'Scanning…' : 'Start Scan') }}
           </button>
-          <button class="btn danger" :disabled="!scanning" @click="stopScan">Stop</button>
-          <button class="btn secondary" :disabled="scanning || processing" @click="refreshCameras">Refresh</button>
         </div>
       </header>
 
@@ -275,7 +272,7 @@ onUnmounted(() => {
             <video ref="videoEl" class="video" autoplay playsinline muted></video>
 
             <div v-if="!scanning && !processing" class="overlay">
-              Klik <strong>Start</strong> untuk mulai scan
+              Klik <strong>Start Scan</strong> untuk mulai scan
             </div>
 
             <div class="reticle" aria-hidden="true">
@@ -289,6 +286,18 @@ onUnmounted(() => {
               <span v-else-if="scanning">scanning</span>
               <span v-else>idle</span>
             </div>
+          </div>
+
+          <!-- Button controls dipindah ke bawah video -->
+          <div class="video-controls">
+            <button class="btn-ctrl danger" :disabled="!scanning" @click="stopScan">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>
+              Stop
+            </button>
+            <button class="btn-ctrl secondary" :disabled="scanning || processing" @click="refreshCameras">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+              Refresh
+            </button>
           </div>
 
           <p class="hint">Catatan: akses kamera umumnya hanya berjalan di HTTPS atau localhost.</p>
@@ -378,6 +387,10 @@ onUnmounted(() => {
   display:flex; flex-direction:column; justify-content:center;
   gap:4px; padding:0 10px;
   cursor:pointer;
+  transition: all .2s ease;
+}
+.hamburger:hover {
+  background: rgba(255,255,255,.15);
 }
 .hamburger span{
   display:block; height:2px;
@@ -457,6 +470,52 @@ onUnmounted(() => {
 .badge.on { background: rgba(34,197,94,.15); border-color: rgba(34,197,94,.35); }
 .badge.busy { background: rgba(245,158,11,.18); border-color: rgba(245,158,11,.4); }
 
+.video-controls {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.btn-ctrl {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all .2s ease;
+}
+
+.btn-ctrl.danger {
+  background: #fee;
+  border-color: #fcc;
+  color: #c33;
+}
+.btn-ctrl.danger:hover:not(:disabled) {
+  background: #fdd;
+  border-color: #faa;
+}
+
+.btn-ctrl.secondary {
+  background: #f8f8f8;
+  border-color: #ddd;
+  color: #333;
+}
+.btn-ctrl.secondary:hover:not(:disabled) {
+  background: #f0f0f0;
+}
+
+.btn-ctrl:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
 .hint { color:#666; margin: 10px 0 0; font-size: 13px; }
 
 .alert { padding: 10px 12px; border-radius: 12px; margin-bottom: 12px; border: 1px solid #eee; }
@@ -508,9 +567,16 @@ onUnmounted(() => {
   cursor: pointer;
   color: #fff;
   font-weight: 700;
+  transition: all .2s ease;
+}
+.btn:hover:not(:disabled) {
+  background: rgba(255,255,255,.15);
 }
 .btn.secondary { background: rgba(255,255,255,.06); }
 .btn.primary { background: rgba(99,102,241,.22); border-color: rgba(99,102,241,.35); }
+.btn.primary:hover:not(:disabled) {
+  background: rgba(99,102,241,.3);
+}
 .btn.danger { background: rgba(239,68,68,.18); border-color: rgba(239,68,68,.35); }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 
