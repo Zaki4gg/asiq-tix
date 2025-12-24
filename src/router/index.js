@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '@/views/HomeView.vue'
 import Login from '@/views/Login.vue'
 import EventDetailView from '../views/EventDetailView.vue'
+import ScanQR from '@/views/ScanQR.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -16,6 +17,7 @@ const router = createRouter({
     { path: '/logout', name: 'logout', component: () => import('@/views/LogoutConfirm.vue') },
     { path: '/wallet', name: 'wallet', component: () => import('@/views/Wallet.vue') },
     { path: '/history', name: 'history', component: () => import('@/views/History.vue') },
+    { path: '/scan', name: 'scan', component: ScanQR, meta: { requiresAuth: true } },
     { path: '/:pathMatch(.*)*', redirect: { name: 'login' } },
   ],
 })
