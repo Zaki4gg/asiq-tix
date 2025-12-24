@@ -237,34 +237,29 @@ onUnmounted(() => {
     <SideNavSB v-model="sidebarOpen" />
 
     <div class="page">
+      <!-- HEADER CUMAN HAMBURGER DOANG -->
       <header class="topbar">
-        <div class="left">
-          <button class="hamburger" type="button" aria-label="Toggle menu" @click="toggleSidebar">
-            <span></span><span></span><span></span>
-          </button>
-          <div class="titles">
-            <h1 class="title">Scan Ticket QR</h1>
-            <p class="subtitle">Redeem tiket sekali pakai dari QR</p>
-          </div>
-        </div>
-
-        <div class="actions">
-          <button class="btn primary" :disabled="scanning || processing" @click="startScan">
-            {{ processing ? 'Processing…' : (scanning ? 'Scanning…' : 'Start Scan') }}
-          </button>
-        </div>
+        <button class="hamburger" type="button" aria-label="Toggle menu" @click="toggleSidebar">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <h1 class="title">Scan Ticket QR</h1>
       </header>
 
       <main class="content">
         <section class="panel">
           <div class="panel-head">
             <h2>Camera</h2>
-            <div class="inline">
+            <div class="camera-controls">
               <select class="select" v-model="selectedDeviceId" :disabled="scanning || cameras.length === 0">
                 <option v-for="c in cameras" :key="c.deviceId" :value="c.deviceId">
                   {{ c.label || `Camera ${c.deviceId.slice(0, 6)}…` }}
                 </option>
               </select>
+              <button class="btn secondary" :disabled="scanning || processing" @click="refreshCameras">
+                Refresh
+              </button>
             </div>
           </div>
 
@@ -272,7 +267,7 @@ onUnmounted(() => {
             <video ref="videoEl" class="video" autoplay playsinline muted></video>
 
             <div v-if="!scanning && !processing" class="overlay">
-              Klik <strong>Start Scan</strong> untuk mulai scan
+              Klik <strong>Start</strong> untuk mulai scan
             </div>
 
             <div class="reticle" aria-hidden="true">
@@ -288,15 +283,13 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Button controls dipindah ke bawah video -->
-          <div class="video-controls">
-            <button class="btn-ctrl danger" :disabled="!scanning" @click="stopScan">
-              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>
-              Stop
+          <!-- SEMUA BUTTON CONTROL DI SINI -->
+          <div class="action-buttons">
+            <button class="btn primary" :disabled="scanning || processing" @click="startScan">
+              {{ processing ? 'Processing…' : (scanning ? 'Scanning…' : 'Start Scan') }}
             </button>
-            <button class="btn-ctrl secondary" :disabled="scanning || processing" @click="refreshCameras">
-              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
-              Refresh
+            <button class="btn danger" :disabled="!scanning" @click="stopScan">
+              Stop Scan
             </button>
           </div>
 
@@ -306,9 +299,7 @@ onUnmounted(() => {
         <section class="panel">
           <div class="panel-head">
             <h2>Hasil</h2>
-            <div class="right-actions">
-              <button class="btn secondary" :disabled="scanning || processing" @click="reset">Reset</button>
-            </div>
+            <button class="btn secondary" :disabled="scanning || processing" @click="reset">Reset</button>
           </div>
 
           <div v-if="errorMsg" class="alert error">{{ errorMsg }}</div>
@@ -364,93 +355,139 @@ onUnmounted(() => {
 .layout { min-height: 100vh; background: #0b0d12; }
 .page { max-width: 1200px; margin: 0 auto; padding: 16px; }
 
+/* HEADER - CUMAN HAMBURGER */
 .topbar {
-  position: sticky; top: 0; z-index: 5;
-  background: #f4f1de;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,.06);
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(11,13,18,.9);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,.08);
   border-radius: 14px;
-  padding: 12px 12px;
-  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
   margin-bottom: 16px;
 }
-.left { display:flex; align-items:center; gap:12px; min-width: 0; }
-.titles { min-width: 0; }
-.title { margin:0; font-size: 18px; color: #fff; letter-spacing: .2px; }
-.subtitle { margin: 2px 0 0; font-size: 12px; color: rgba(255,255,255,.65); }
 
-.hamburger{
-  width: 42px; height: 42px;
+.hamburger {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
   border-radius: 12px;
-  border: 1px solid rgba(255,255,255,.15);
-  background: rgba(255,255,255,.08);
-  display:flex; flex-direction:column; justify-content:center;
-  gap:4px; padding:0 10px;
-  cursor:pointer;
+  border: 1px solid rgba(255,255,255,.2);
+  background: rgba(255,255,255,.1);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  cursor: pointer;
   transition: all .2s ease;
 }
+
 .hamburger:hover {
-  background: rgba(255,255,255,.15);
-}
-.hamburger span{
-  display:block; height:2px;
-  background: rgba(255,255,255,.9);
-  border-radius:999px;
+  background: rgba(255,255,255,.18);
+  border-color: rgba(255,255,255,.35);
 }
 
-.actions { display:flex; gap:8px; flex-wrap: wrap; justify-content:flex-end; }
+.hamburger span {
+  display: block;
+  width: 22px;
+  height: 3px;
+  background: #fff;
+  border-radius: 2px;
+}
 
-.content { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.3px;
+}
+
+.content { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
 .panel {
   background: #fff;
   border-radius: 14px;
-  padding: 14px;
+  padding: 18px;
   border: 1px solid #eee;
   color: #0b0d12;
 }
-.panel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 10px; }
-.panel h2 { margin:0; font-size: 15px; }
-.inline { display:flex; gap:8px; align-items:center; }
-.right-actions { display:flex; gap:8px; }
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.camera-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
 
 .select {
-  padding: 9px 10px; border-radius: 10px;
-  border: 1px solid #ddd; min-width: 260px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  min-width: 240px;
   background: #fff;
+  font-size: 14px;
 }
 
 .video-wrap {
   position: relative;
   width: 100%;
-  aspect-ratio: 16/9;
+  aspect-ratio: 4/3;
   background: #111;
-  border-radius: 14px;
+  border-radius: 12px;
   overflow: hidden;
   border: 1px solid rgba(0,0,0,.15);
 }
-.video { width:100%; height:100%; object-fit: cover; }
+
+.video { width: 100%; height: 100%; object-fit: cover; }
+
 .overlay {
-  position:absolute; inset:0;
-  display:flex; align-items:center; justify-content:center;
-  color:#fff; background: rgba(0,0,0,.35);
-  font-size: 14px;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(0,0,0,.4);
+  font-size: 15px;
 }
 
-.reticle { position:absolute; inset: 0; pointer-events: none; }
-.corner { position:absolute; width: 36px; height: 36px; border: 3px solid rgba(255,255,255,.85); }
+.reticle { position: absolute; inset: 0; pointer-events: none; }
+.corner { position: absolute; width: 36px; height: 36px; border: 3px solid rgba(255,255,255,.85); }
 .corner.tl { top: 18px; left: 18px; border-right: none; border-bottom: none; border-radius: 10px 0 0 0; }
 .corner.tr { top: 18px; right: 18px; border-left: none; border-bottom: none; border-radius: 0 10px 0 0; }
 .corner.bl { bottom: 18px; left: 18px; border-right: none; border-top: none; border-radius: 0 0 0 10px; }
 .corner.br { bottom: 18px; right: 18px; border-left: none; border-top: none; border-radius: 0 0 10px 0; }
 
 .scanline {
-  position:absolute; left: 12%; right: 12%;
-  top: 18%; height: 2px;
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 18%;
+  height: 2px;
   background: rgba(255,255,255,.9);
-  animation: scan 1.2s linear infinite;
-  box-shadow: 0 0 18px rgba(255,255,255,.35);
+  animation: scan 1.3s linear infinite;
+  box-shadow: 0 0 18px rgba(255,255,255,.4);
 }
+
 @keyframes scan {
   0% { transform: translateY(0); opacity: .2; }
   10% { opacity: 1; }
@@ -459,129 +496,166 @@ onUnmounted(() => {
 }
 
 .badge {
-  position:absolute; top: 10px; left: 10px;
-  font-size: 11px; font-weight: 700;
-  padding: 6px 10px; border-radius: 999px;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 7px 11px;
+  border-radius: 999px;
   background: rgba(255,255,255,.12);
   color: rgba(255,255,255,.9);
-  border: 1px solid rgba(255,255,255,.18);
+  border: 1px solid rgba(255,255,255,.2);
   text-transform: uppercase;
 }
-.badge.on { background: rgba(34,197,94,.15); border-color: rgba(34,197,94,.35); }
-.badge.busy { background: rgba(245,158,11,.18); border-color: rgba(245,158,11,.4); }
 
-.video-controls {
-  display: flex;
-  gap: 10px;
-  margin-top: 12px;
+.badge.on { background: rgba(34,197,94,.18); border-color: rgba(34,197,94,.4); }
+.badge.busy { background: rgba(245,158,11,.2); border-color: rgba(245,158,11,.45); }
+
+/* BUTTON ACTIONS DI BAWAH VIDEO */
+.action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 14px;
 }
 
-.btn-ctrl {
-  flex: 1;
-  padding: 10px 14px;
+.hint {
+  color: #666;
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
+.alert {
+  padding: 11px 14px;
   border-radius: 12px;
-  border: 1px solid #ddd;
-  background: #fff;
-  cursor: pointer;
-  font-weight: 700;
+  margin-bottom: 14px;
+  border: 1px solid #eee;
   font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: all .2s ease;
 }
 
-.btn-ctrl.danger {
-  background: #fee;
-  border-color: #fcc;
-  color: #c33;
-}
-.btn-ctrl.danger:hover:not(:disabled) {
-  background: #fdd;
-  border-color: #faa;
-}
-
-.btn-ctrl.secondary {
-  background: #f8f8f8;
-  border-color: #ddd;
-  color: #333;
-}
-.btn-ctrl.secondary:hover:not(:disabled) {
-  background: #f0f0f0;
-}
-
-.btn-ctrl:disabled {
-  opacity: .4;
-  cursor: not-allowed;
-}
-
-.hint { color:#666; margin: 10px 0 0; font-size: 13px; }
-
-.alert { padding: 10px 12px; border-radius: 12px; margin-bottom: 12px; border: 1px solid #eee; }
 .alert.info { background: #f6f6f6; }
-.alert.error { background: #ffecec; border-color: #ffd0d0; }
+.alert.error { background: #ffecec; border-color: #ffd0d0; color: #c33; }
 
-.summary { border: 1px solid #eee; border-radius: 14px; padding: 10px 12px; }
+.summary {
+  border: 1px solid #eee;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
 .kv {
-  display:grid; grid-template-columns: 140px 1fr;
-  gap: 10px;
-  padding: 10px 0;
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 12px;
+  padding: 11px 0;
   border-bottom: 1px dashed #eee;
 }
+
 .kv:last-child { border-bottom: none; }
-.k { font-weight: 700; color: #111; }
-.v { color: #111; }
+
+.k { font-weight: 700; color: #111; font-size: 14px; }
+.v { color: #111; font-size: 14px; }
+
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: ui-monospace, 'Courier New', monospace;
   word-break: break-all;
+  font-size: 13px;
 }
 
 .pill {
-  display:inline-block; padding: 6px 10px; border-radius: 999px;
-  background:#f0f0f0; font-weight: 900; font-size: 12px;
-  letter-spacing: .3px;
+  display: inline-block;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: #f0f0f0;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.4px;
 }
-.pill.ok { background:#e7ffef; border: 1px solid #bff0cf; }
-.pill.warn { background:#fff4e5; border: 1px solid #ffd8a8; }
-.pill.bad { background:#ffe7e7; border: 1px solid #ffc1c1; }
+
+.pill.ok { background: #e7ffef; border: 2px solid #bff0cf; color: #065f46; }
+.pill.warn { background: #fff4e5; border: 2px solid #ffd8a8; color: #92400e; }
+.pill.bad { background: #ffe7e7; border: 2px solid #ffc1c1; color: #991b1b; }
 
 .card {
   margin-top: 14px;
   border: 1px solid #eee;
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: 12px;
+  padding: 14px;
   background: #fff;
 }
-.card-head { display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px; }
-.card h3 { margin: 0; font-size: 14px; }
-.grid { display:grid; grid-template-columns: 140px 1fr; gap: 8px 10px; }
-.k2 { font-weight: 700; color: #111; }
-.v2 { color: #111; }
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.card h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 9px 12px;
+}
+
+.k2 { font-weight: 700; color: #111; font-size: 14px; }
+.v2 { color: #111; font-size: 14px; }
 
 .btn {
-  padding: 9px 12px;
+  padding: 11px 16px;
   border-radius: 12px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.08);
+  border: 1px solid #ddd;
+  background: #f9f9f9;
   cursor: pointer;
-  color: #fff;
+  color: #111;
   font-weight: 700;
+  font-size: 14px;
   transition: all .2s ease;
 }
+
 .btn:hover:not(:disabled) {
-  background: rgba(255,255,255,.15);
+  background: #f0f0f0;
+  border-color: #bbb;
 }
-.btn.secondary { background: rgba(255,255,255,.06); }
-.btn.primary { background: rgba(99,102,241,.22); border-color: rgba(99,102,241,.35); }
+
+.btn.primary {
+  background: #10b981;
+  border-color: #059669;
+  color: #fff;
+}
+
 .btn.primary:hover:not(:disabled) {
-  background: rgba(99,102,241,.3);
+  background: #059669;
 }
-.btn.danger { background: rgba(239,68,68,.18); border-color: rgba(239,68,68,.35); }
-.btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.btn.danger {
+  background: #ef4444;
+  border-color: #dc2626;
+  color: #fff;
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.btn.secondary {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
 
 @media (max-width: 980px) {
   .content { grid-template-columns: 1fr; }
-  .select { min-width: 220px; }
+  .select { min-width: 200px; }
+  .camera-controls { flex-direction: column; align-items: stretch; }
 }
 </style>
