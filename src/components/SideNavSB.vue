@@ -117,9 +117,6 @@ watch(isOpen, (v) => {
       <nav class="mini-nav" aria-label="Main">
         <RouterLink class="link" active-class="active" to="/home" @click="close">Home</RouterLink>
 
-        <!-- Status kecil (opsional) -->
-        <div v-if="roleLoading" class="role-hint">Loading role…</div>
-
         <!-- Hanya admin -->
         <RouterLink
           v-if="role === 'admin'"

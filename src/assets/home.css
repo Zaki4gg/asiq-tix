@@ -215,10 +215,16 @@
   position:absolute; left:0; right:0; bottom:0; height: 60%;
   background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(157,34,21,0.15) 25%, rgba(157,34,21,.5) 60%, rgba(157,34,21,.75) 100%);
 }
-.home-page .title{
-  position:absolute; left:0; right:0; bottom: 16px;
-  text-align:center; color:#fff;
-  font-weight: 800; letter-spacing: .35em; font-size: clamp(16px, 2.2vw, 20px);
+.home-page .img-wrap .title{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom: 16px;
+  text-align:center;
+  color:#fff;
+  font-weight: 800;
+  letter-spacing: .35em;
+  font-size: clamp(16px, 2.2vw, 20px);
   text-shadow: 0 4px 18px rgba(0,0,0,.6);
 }
 .home-page .meta{ padding: 16px 18px 6px; font-size: 14px; color:#f0f0f0 }
