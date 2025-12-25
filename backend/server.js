@@ -18,7 +18,7 @@ import process from 'node:process'
 // import fetch from 'node-fetch'
 
 // ----- Harga POL/IDR helper -----
-import fetch from 'node-fetch'  // kalau belum, npm install node-fetch
+// import fetch from 'node-fetch'  // kalau belum, npm install node-fetch
 
 // Ambil harga POL (MATIC) dalam IDR dari CoinGecko
 async function fetchPolIdrRate() {
