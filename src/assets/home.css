@@ -217,15 +217,20 @@
 }
 .home-page .img-wrap .title{
   position:absolute;
-  left:0;
-  right:0;
+  left:16px;
+  right:16px;
   bottom: 16px;
+
   text-align:center;
   color:#fff;
   font-weight: 800;
-  letter-spacing: .35em;
-  font-size: clamp(16px, 2.2vw, 20px);
+  font-size: clamp(14px, 2vw, 18px);
+
+  letter-spacing: .18em;        /* dikurangi supaya muat */
+  text-transform: uppercase;
   text-shadow: 0 4px 18px rgba(0,0,0,.6);
+
+  white-space: normal;          /* boleh pindah baris kalau panjang */
 }
 .home-page .meta{ padding: 16px 18px 6px; font-size: 14px; color:#f0f0f0 }
 .home-page .meta strong{ font-weight: 800 }
