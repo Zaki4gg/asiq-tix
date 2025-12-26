@@ -603,7 +603,7 @@ onUnmounted(() => {
 }
 
 .k2 { font-weight: 700; color: #111; font-size: 14px; }
-.v2 { color: #F4F1DE; font-size: 14px; }
+.v2 { color: #111; font-size: 14px; }
 
 .btn {
   padding: 11px 16px;
