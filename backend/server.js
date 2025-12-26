@@ -45,6 +45,7 @@ async function fetchPolIdrRate() {
    ========================= */
 const PORT = Number(process.env.PORT) || 3001
 const IS_PROD = process.env.NODE_ENV === 'production'
+const IS_TEST = process.env.NODE_ENV === 'test'
 
 const ORIGINS_ENV = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '')
   .split(',').map(s => s.trim()).filter(Boolean)
@@ -116,11 +117,15 @@ const BUCKET = process.env.SUPABASE_BUCKET || 'event-images'
    ========================= */
 const envAdmins = (process.env.ADMIN_ADDRESSES || process.env.ADMIN_ADDRESS || '')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
-if (envAdmins.length) {
-  await supabase.from('admins').upsert(
-    envAdmins.map(a => ({ address: a, note: 'seeded-from-env' })),
-    { onConflict: 'address' }
-  )
+if (envAdmins.length && !IS_TEST) {
+  try {
+    await supabase.from('admins').upsert(
+      envAdmins.map(a => ({ address: a, note: 'seeded-from-env' })),
+      { onConflict: 'address' }
+    )
+  } catch (e) {
+    console.error('[seed admins] failed:', e?.message || e)
+  }
 }
 
 /* =========================
@@ -208,7 +213,7 @@ const promoterAbi = [
 let rpcProvider = null
 let promoterContract = null
 
-if (RPC_URL && TICKETS_CONTRACT) {
+if (!IS_TEST && RPC_URL && TICKETS_CONTRACT) {
   try {
     rpcProvider = new JsonRpcProvider(RPC_URL)
     promoterContract = new Contract(TICKETS_CONTRACT, promoterAbi, rpcProvider)
@@ -217,6 +222,7 @@ if (RPC_URL && TICKETS_CONTRACT) {
     console.error('[onchain] Failed to init RPC/contract', e)
   }
 }
+
 
 async function isOnchainPromoter (addr) {
   if (!promoterContract || !addr) return false
@@ -698,24 +704,32 @@ const withdrawSchema = z.object({
 
 // HTTP server + Socket.IO
 const httpServer = http.createServer(app)
-const io = new IOServer(httpServer, {
-  cors: {
-    origin(origin, cb) {
-      if (!origin) return cb(null, true)
-      if (ALLOWLIST.includes(origin)) return cb(null, true)
-      if (!IS_PROD && /^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/i.test(origin)) return cb(null, true)
-      return cb(new Error(`Not allowed by CORS: ${origin}`), false)
-    },
-    credentials: true
-  }
-})
-io.on('connection', (socket) => {
-  const addr = normAddr(socket.handshake.auth?.address || socket.handshake.query?.address || '')
-  if (isEthAddr(addr)) socket.join(addr)
-})
+
+let io = null
+if (!IS_TEST) {
+  io = new IOServer(httpServer, {
+    cors: {
+      origin(origin, cb) {
+        if (!origin) return cb(null, true)
+        if (ALLOWLIST.includes(origin)) return cb(null, true)
+        if (!IS_PROD && /^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/i.test(origin)) return cb(null, true)
+        return cb(new Error(`Not allowed by CORS: ${origin}`), false)
+      },
+      credentials: true
+    }
+  })
+
+  io.on('connection', (socket) => {
+    const addr = normAddr(socket.handshake.auth?.address || socket.handshake.query?.address || '')
+    if (isEthAddr(addr)) socket.join(addr)
+  })
+}
+
 const emitTx = (wallet, tx) => {
+  if (!io) return
   if (wallet && tx) io.to(normAddr(wallet)).emit('tx:new', tx)
 }
+
 
 // GET bootstrap — alias /api/transactions dan /transactions
 app.get(['/api/transactions', '/transactions'], requireAddress, async (req, res) => {
@@ -1088,8 +1102,12 @@ app.use((err, _req, res, _next) => {
   res.status(err.status || 500).json({ message: err.message || 'Internal Server Error' })
 })
 
-httpServer.listen(PORT, () => {
-  console.log(`[server] API & Socket on http://localhost:${PORT}`)
-  console.log(`[server] NODE_ENV: ${process.env.NODE_ENV || 'development'}`)
-  console.log(`[server] CORS allowlist: ${ALLOWLIST.length ? ALLOWLIST.join(', ') : '(empty)'}`)
-})
+export { app, httpServer }
+if (!IS_TEST) {
+  httpServer.listen(PORT, () => {
+    console.log(`[server] API & Socket on http://localhost:${PORT}`)
+    console.log(`[server] NODE_ENV: ${process.env.NODE_ENV || 'development'}`)
+    console.log(`[server] CORS allowlist: ${ALLOWLIST.length ? ALLOWLIST.join(', ') : '(empty)'}`)
+  })
+}
+
