@@ -184,7 +184,7 @@ app.get('/api/promoter/events/:id/transactions', requireAddress, requireRole(['p
   // 2) Ambil transaksi purchase yang ref_id = eventId
   const { data, error } = await supabase
     .from('transactions')
-    .select('id,wallet,created_at,quantity,amount,status,tx_hash,scanned,scanned_at')
+    .select('id,wallet,created_at,amount,status,tx_hash,scanned,scanned_at')
     .eq('kind', 'purchase')
     .eq('ref_id', eventId)
     .order('created_at', { ascending: false })

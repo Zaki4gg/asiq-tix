@@ -144,7 +144,7 @@ onMounted(async () => {
 
         <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
 
-        <div v-if="!loading && rows.length === 0" class="empty">
+        <div v-if="!loading && !errorMsg && rows.length === 0" class="empty">
           Belum ada pembelian untuk event ini.
         </div>
 
