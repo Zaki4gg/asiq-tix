@@ -3,17 +3,12 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SideNavSB from '@/components/SideNavSB.vue'
 
-const router = useRouter()
 const route = useRoute()
+const router = useRouter()
 
 const sidebarOpen = ref(false)
 const toggleSidebar = () => (sidebarOpen.value = !sidebarOpen.value)
 watch(() => route.fullPath, () => (sidebarOpen.value = false))
-
-function goDetail (eventId) {
-  if (!eventId) return
-  router.push({ name: 'promoter-event-transactions', params: { id: eventId } })
-}
 
 // --- API helper (sama pola) ---
 const RAW_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:3001').replace(/\/+$/, '')
@@ -35,15 +30,10 @@ async function api (path, options = {}) {
   return data
 }
 
-function formatIdr (num) {
-  if (!num) return ''
-  const s = String(Math.round(num))
-  return s.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
-}
 function formatDateTime (value) {
   if (!value) return '-'
   const d = new Date(value)
-  if (!Number.isFinite(d.getTime())) return value
+  if (!Number.isFinite(d.getTime())) return String(value)
   return d.toLocaleString('id-ID', {
     day: '2-digit',
     month: 'short',
@@ -56,46 +46,19 @@ function formatDateTime (value) {
 const role = ref('customer')
 const loading = ref(false)
 const errorMsg = ref('')
-const events = ref([])
+
+const eventInfo = ref(null)
+const purchases = ref([])
+
+const eventId = computed(() => String(route.params?.id || ''))
 
 const rows = computed(() =>
-  events.value.map((ev) => {
-    const sold = Number(ev.sold_tickets || 0)
-    const total = Number(ev.total_tickets || 0)
-    const priceIdr = Number(ev.price_idr || 0)
-    const revenueIdr = sold * priceIdr
-    return {
-      id: ev.id,
-      title: ev.title,
-      venue: ev.venue,
-      dateLabel: formatDateTime(ev.date_iso),
-      sold,
-      total,
-      remaining: Math.max(total - sold, 0),
-      priceIdr,
-      revenueIdr,
-      listed: !!ev.listed
-    }
-  })
+  purchases.value.map((tx) => ({
+    id: tx.id,
+    wallet: tx.wallet,
+    createdAtLabel: formatDateTime(tx.created_at)
+  }))
 )
-
-const summary = computed(() => {
-  const list = rows.value
-  const totalEvents = list.length
-  let totalTickets = 0
-  let totalSold = 0
-  let totalRemaining = 0
-  let totalRevenueIdr = 0
-
-  for (const r of list) {
-    totalTickets += r.total
-    totalSold += r.sold
-    totalRemaining += r.remaining
-    totalRevenueIdr += r.revenueIdr
-  }
-
-  return { totalEvents, totalTickets, totalSold, totalRemaining, totalRevenueIdr }
-})
 
 async function loadRole () {
   try {
@@ -107,24 +70,34 @@ async function loadRole () {
   }
 }
 
-async function loadEvents () {
+async function loadPurchases () {
+  if (!eventId.value) {
+    errorMsg.value = 'Event ID tidak valid'
+    return
+  }
+
   loading.value = true
   errorMsg.value = ''
   try {
-    const res = await api('/api/my-events')
-    events.value = Array.isArray(res?.items) ? res.items : []
+    const res = await api(`/api/promoter/events/${encodeURIComponent(eventId.value)}/transactions`)
+    eventInfo.value = res?.event || null
+    purchases.value = Array.isArray(res?.items) ? res.items : []
   } catch (e) {
     console.error(e)
-    errorMsg.value = e.message || 'Gagal memuat data event'
+    errorMsg.value = e.message || 'Gagal memuat transaksi'
   } finally {
     loading.value = false
   }
 }
 
+function goBack () {
+  router.push({ name: 'promoter-dashboard' })
+}
+
 onMounted(async () => {
   await loadRole()
   if (role.value === 'promoter') {
-    await loadEvents()
+    await loadPurchases()
   }
 })
 </script>
@@ -149,38 +122,22 @@ onMounted(async () => {
       <section class="hero hero--compact">
         <div class="hero-text">
           <p class="badge">Promoter</p>
-          <h1>Penjualan Tiket Event Saya</h1>
-          <p class="muted">Data hanya untuk event yang dibuat dengan wallet ini.</p>
+          <h1>Detail Pembelian Tiket</h1>
+          <p class="muted">
+            <span v-if="eventInfo?.title">{{ eventInfo.title }} — </span>
+            Event ID: {{ eventId || '-' }}
+          </p>
         </div>
-      </section>
 
-      <section v-if="role === 'promoter'" class="summary-grid">
-        <article class="summary-card">
-          <p class="label">Event Saya</p>
-          <p class="value">{{ summary.totalEvents }}</p>
-        </article>
-        <article class="summary-card">
-          <p class="label">Total Tiket</p>
-          <p class="value">{{ summary.totalTickets }}</p>
-        </article>
-        <article class="summary-card">
-          <p class="label">Tiket Terjual</p>
-          <p class="value">{{ summary.totalSold }}</p>
-        </article>
-        <article class="summary-card">
-          <p class="label">Tiket Tersisa</p>
-          <p class="value">{{ summary.totalRemaining }}</p>
-        </article>
-        <article class="summary-card">
-          <p class="label">Perkiraan Pendapatan</p>
-          <p class="value">Rp {{ formatIdr(summary.totalRevenueIdr) || '0' }}</p>
-        </article>
+        <div class="hero-actions">
+          <button class="btn secondary" type="button" @click="goBack">Back</button>
+        </div>
       </section>
 
       <section v-if="role === 'promoter'" class="table-section">
         <header class="table-header">
-          <h2>Event Saya</h2>
-          <button class="refresh" @click="loadEvents" :disabled="loading">
+          <h2>Pembeli</h2>
+          <button class="refresh" @click="loadPurchases" :disabled="loading">
             {{ loading ? 'Memuat…' : 'Refresh' }}
           </button>
         </header>
@@ -188,53 +145,23 @@ onMounted(async () => {
         <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
 
         <div v-if="!loading && rows.length === 0" class="empty">
-          Belum ada event yang dimiliki oleh wallet ini.
+          Belum ada pembelian untuk event ini.
         </div>
 
         <div v-else class="table-wrapper">
           <table class="table">
             <thead>
               <tr>
-                <th>Event</th>
-                <th>Tanggal</th>
-                <th>Terjual / Total</th>
-                <th>Sisa</th>
-                <th>Harga (Rp)</th>
-                <th>Pendapatan (Rp)</th>
-                <th>Status</th>
-                <th>Aksi</th>
+                <th>Waktu Pembelian</th>
+                <th>Wallet Pembeli (MetaMask)</th>
               </tr>
             </thead>
-
             <tbody>
-              <tr v-for="ev in rows" :key="ev.id">
-                <td>
-                  <div class="cell-title">
-                    <div class="title">{{ ev.title }}</div>
-                    <div class="sub">{{ ev.venue }}</div>
-                  </div>
-                </td>
-
-                <td>{{ ev.dateLabel }}</td>
-                <td>{{ ev.sold }} / {{ ev.total }}</td>
-                <td>{{ ev.remaining }}</td>
-                <td>Rp {{ formatIdr(ev.priceIdr) || '0' }}</td>
-                <td>Rp {{ formatIdr(ev.revenueIdr) || '0' }}</td>
-
-                <td>
-                  <span class="pill" :class="ev.listed ? 'pill--green' : 'pill--gray'">
-                    {{ ev.listed ? 'Listed' : 'Unlisted' }}
-                  </span>
-                </td>
-
-                <td>
-                  <button class="btn-detail" type="button" @click="goDetail(ev.id)">
-                    Detail
-                  </button>
-                </td>
+              <tr v-for="r in rows" :key="r.id">
+                <td>{{ r.createdAtLabel }}</td>
+                <td class="mono">{{ r.wallet }}</td>
               </tr>
             </tbody>
-
           </table>
         </div>
       </section>
@@ -318,12 +245,37 @@ onMounted(async () => {
   border-radius: 2px;
 }
 
+.home-page .sb-card{
+  position: fixed;
+  top: calc(var(--topbar-h) + 10px);
+  right: 20px;
+  bottom: 16px;
+
+  width: 220px;
+  background: var(--brand);
+  color: #2b1c08;
+  border-radius: 16px;
+  border: 1px solid rgba(0,0,0,.12);
+  padding: 14px 12px;
+  overflow: auto;
+  z-index: 1050;
+}
+.home-page .sb-menu{ display:flex; flex-direction:column; gap:10px; }
+.home-page .sb-item{
+  padding: 12px 14px;
+  font-weight: 800;
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+}
+.home-page .sb-item.active{ background: rgba(0,0,0,.10); }
+.home-page .sb-item:hover{ background: rgba(0,0,0,.06); }
+
 .home-page .container{
   max-width: 1200px;
   margin: 24px auto 40px;
   padding: 0 clamp(14px, 2vw, 20px);
 }
-
 .dashboard{ display: grid; gap: 24px; }
 
 .hero.hero--compact{
@@ -331,16 +283,13 @@ onMounted(async () => {
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
-
-.hero-text h1{
-  font-size: clamp(22px, 4vw, 28px);
-  margin: 4px 0 6px;
-}
-.hero-text .muted{
-  color: var(--muted);
-  font-size: 14px;
-}
+.hero-text h1{ font-size: clamp(22px, 4vw, 28px); margin: 4px 0 6px; }
+.hero-text .muted{ color: var(--muted); font-size: 14px; }
 
 .badge{
   display: inline-flex;
@@ -353,27 +302,19 @@ onMounted(async () => {
   color: var(--brand);
 }
 
-.summary-grid{
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 16px;
-}
-.summary-card{
-  background: var(--panel);
-  border-radius: 16px;
+.hero-actions{ display: flex; justify-content: flex-end; }
+.btn{
+  padding: 8px 12px;
+  border-radius: 12px;
   border: 1px solid var(--border);
-  padding: 14px 16px;
-}
-.summary-card .label{
-  font-size: 11px;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.summary-card .value{
-  margin-top: 6px;
-  font-size: 22px;
+  background: rgba(255,255,255,.08);
+  color: var(--text);
+  font-size: 13px;
   font-weight: 800;
+  cursor: pointer;
 }
+.btn:hover{ background: rgba(255,255,255,.12); }
+.btn.secondary{ background: rgba(255,255,255,.08); }
 
 .table-section{
   background: rgba(15,19,27,.92);
@@ -390,7 +331,7 @@ onMounted(async () => {
 
 .table{
   width:100%;
-  min-width:820px;
+  min-width:640px;
   border-collapse:collapse;
   font-size:13px;
 }
@@ -405,30 +346,7 @@ onMounted(async () => {
   border-bottom:1px solid rgba(255,255,255,.04);
 }
 
-.cell-title .title{ font-weight:700; }
-.cell-title .sub{ font-size:12px; color:var(--muted); }
-
-.btn-detail{
-  padding:6px 10px;
-  border-radius:10px;
-  border:1px solid var(--border);
-  background:rgba(255,255,255,.08);
-  color:var(--text);
-  font-size:12px;
-  font-weight:800;
-  cursor:pointer;
-}
-.btn-detail:hover{ background:rgba(255,255,255,.12); }
-
-.pill{
-  display:inline-flex;
-  padding:2px 10px;
-  border-radius:999px;
-  font-size:11px;
-  letter-spacing:.08em;
-}
-.pill--green{ background:rgba(34,197,94,.12); color:#bbf7d0; }
-.pill--gray{ background:rgba(148,163,184,.16); color:#e5e7eb; }
+.mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
 
 .error{ color:#fecaca; font-size:14px; }
 .empty{ color:var(--muted); }
@@ -437,5 +355,12 @@ onMounted(async () => {
 @media (max-width: 720px){
   .home-page .topbar{ grid-template-columns: 1fr 44px; }
   .home-page .brand img{ display:none; }
+  .home-page .sb-card{
+    top:0; right:0; bottom:0;
+    width:min(86vw, 340px);
+    border-radius:0;
+  }
+  .hero.hero--compact{ flex-direction: column; }
+  .hero-actions{ width: 100%; }
 }
 </style>

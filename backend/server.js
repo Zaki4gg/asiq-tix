@@ -154,6 +154,46 @@ async function requireAdmin(req, res, next) {
   next()
 }
 
+/* =========================
+   PROMOTER: EVENT TRANSACTIONS
+   ========================= */
+// List pembelian tiket untuk 1 event tertentu (hanya event milik promoter yang login)
+// GET /api/promoter/events/:id/transactions
+app.get('/api/promoter/events/:id/transactions', requireAddress, requireRole(['promoter']), async (req, res) => {
+  const promoterWallet = req.walletAddress
+  const eventId = String(req.params.id || '')
+
+  if (!eventId) {
+    return res.status(400).json({ error: 'event_id_required' })
+  }
+
+  // 1) Pastikan event ada & milik promoter yang login
+  const { data: ev, error: evErr } = await supabase
+    .from('events')
+    .select('id,title,venue,date_iso,promoter_wallet')
+    .eq('id', eventId)
+    .maybeSingle()
+
+  if (evErr) return res.status(500).json({ error: evErr.message })
+  if (!ev) return res.status(404).json({ error: 'event_not_found' })
+
+  if (String(ev.promoter_wallet || '').toLowerCase() !== String(promoterWallet).toLowerCase()) {
+    return res.status(403).json({ error: 'forbidden_not_your_event' })
+  }
+
+  // 2) Ambil transaksi purchase yang ref_id = eventId
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('id,wallet,created_at,quantity,amount,status,tx_hash,scanned,scanned_at')
+    .eq('kind', 'purchase')
+    .eq('ref_id', eventId)
+    .order('created_at', { ascending: false })
+    .limit(500)
+
+  if (error) return res.status(500).json({ error: error.message })
+  return res.json({ event: ev, items: data || [] })
+})
+
 // =========================
 // ON-CHAIN PROMOTER CHECK
 // =========================
