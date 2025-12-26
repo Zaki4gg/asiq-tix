@@ -7,12 +7,12 @@ import SideNavSB from '@/components/SideNavSB.vue'
 import Purchase_Success_Dialog from '@/components/Purchase_Success_Dialog.vue'
 import Purchase_Error_Dialog from '@/components/Purchase_Error_Dialog.vue'
 import { ASIQTIX_TICKETS_ABI } from '@/abi/asiqtixTicketsSimpleV3'
+import BuyQuantityDialog from '@/components/BuyQuantityDialog.vue'
 
 const route = useRoute()
 const r = useRouter()
 const { ensureChain } = useMetamask()
 const TICKETS_CONTRACT = import.meta.env.VITE_TICKETS_CONTRACT || ''
-
 
 const sidebarOpen = ref(false)
 const toggleSidebar = () => (sidebarOpen.value = !sidebarOpen.value)
@@ -47,14 +47,49 @@ const showPurchaseError = ref(false)
 const lastPurchase = ref(null)
 const lastPurchaseError = ref('')
 
+// =====================
+// Dialog jumlah tiket
+// =====================
+const showBuyDialog = ref(false)
+
+// Aman: hitung remaining langsung dari ev (tidak bergantung computed lain)
+const buyMax = computed(() => {
+  if (!ev.value) return 1
+
+  const total = Number(ev.value.total_tickets ?? 0)
+  const sold = Number(ev.value.sold_tickets ?? 0)
+
+  if (total > 0) {
+    const remaining = Math.max(0, total - sold)
+    return Math.max(1, remaining)
+  }
+  return 20
+})
+
+function openBuyDialog() {
+  // guard tambahan (walaupun tombol sudah disabled)
+  if (buying.value) return
+
+  const total = Number(ev.value?.total_tickets ?? 0)
+  const sold = Number(ev.value?.sold_tickets ?? 0)
+  const remaining = total > 0 ? Math.max(0, total - sold) : 1
+  if (total > 0 && remaining <= 0) return
+
+  buyMsg.value = ''
+  showBuyDialog.value = true
+}
+
+async function confirmBuy(qty) {
+  showBuyDialog.value = false
+  await buyTicket(qty)
+}
 
 const role = ref('customer')
-
 const isAdmin = computed(() => role.value === 'admin')
 // const isPromoter = computed(() => role.value === 'promoter')
 
-// ===================== 
-// Withdrawal logic for promoter/admin 
+// =====================
+// Withdrawal logic for promoter/admin
 // =====================
 
 // alamat wallet yang sedang login (dari localStorage)
@@ -101,7 +136,7 @@ const canWithdrawPromoter = computed(() =>
   canSeePromoterTools.value && isEventFinished.value && hasPromoterBalance.value
 )
 
-async function buyTicket() {
+async function buyTicket(qty = 1) {
   if (!ev.value) return
 
   if (!wallet()) {
@@ -120,6 +155,23 @@ async function buyTicket() {
     return
   }
 
+  const qtyInt = Number.parseInt(String(qty), 10)
+  if (!Number.isFinite(qtyInt) || qtyInt < 1) {
+    buyMsg.value = 'Jumlah tiket tidak valid.'
+    return
+  }
+
+  // validasi berdasarkan stok off-chain (kalau total_tickets dipakai)
+  if (ev.value?.total_tickets > 0) {
+    const total = Number(ev.value.total_tickets ?? 0)
+    const sold = Number(ev.value.sold_tickets ?? 0)
+    const remaining = Math.max(0, total - sold)
+    if (qtyInt > remaining) {
+      buyMsg.value = 'Jumlah melebihi sisa tiket.'
+      return
+    }
+  }
+
   try {
     buying.value = true
     buyMsg.value = ''
@@ -130,11 +182,18 @@ async function buyTicket() {
 
     const contract = new ethers.Contract(TICKETS_CONTRACT, ASIQTIX_TICKETS_ABI, signer)
 
-    // TODO kalau mau: ambil quantity dari input
-    const quantity = 1n
+    const quantity = BigInt(qtyInt)
 
     // 1) Ambil data event on-chain, termasuk priceWei
     const onchain = await contract.events(chainEventId)
+
+    // validasi on-chain supply
+    if (onchain.maxSupply > 0n) {
+      const remainingOnchain = onchain.maxSupply - onchain.sold
+      if (remainingOnchain <= 0n) throw new Error('Tiket on-chain sudah habis')
+      if (quantity > remainingOnchain) throw new Error('Jumlah melebihi sisa tiket on-chain')
+    }
+
     const unitPriceWei = onchain.priceWei
     if (unitPriceWei <= 0n) throw new Error('Harga tiket on-chain tidak valid')
     if (!onchain.active) throw new Error('Event ini tidak aktif lagi')
@@ -163,15 +222,15 @@ async function buyTicket() {
     await api('/purchase', {
       method: 'POST',
       body: JSON.stringify({
-        amount: Number(ev.value.price_idr || 0) || 0,   // simpan harga IDR untuk halaman history
+        amount: (Number(ev.value.price_idr || 0) || 0) * qtyInt, // simpan harga IDR untuk halaman history
         ref_id: ev.value.id,
-        description: 'On-chain purchase', 
+        description: 'On-chain purchase',
         tx_hash: tx.hash
       })
     })
 
-    ev.value.sold_tickets = 
-      Number(ev.value.sold_tickets ?? 0) + Number(quantity)
+    ev.value.sold_tickets = Number(ev.value.sold_tickets ?? 0) + qtyInt
+
     // hitung harga dalam POL untuk ditampilkan di struk
     const unitPricePol = Number(ethers.formatEther(unitPriceWei))
     const totalPol = Number(ethers.formatEther(totalPriceWei))
@@ -180,7 +239,7 @@ async function buyTicket() {
       eventTitle: ev.value.title,
       venue: ev.value.venue,
       dateText: dateText.value,
-      quantity: Number(quantity),
+      quantity: qtyInt,
       pricePerTicketPol: unitPricePol,
       totalPol,
       txHash: tx.hash
@@ -211,7 +270,6 @@ async function buyTicket() {
 // =====================
 // ambil role di backend
 //======================
-
 async function loadRole () {
   if (!wallet()) {
     role.value = 'customer'
@@ -219,7 +277,7 @@ async function loadRole () {
   }
   try {
     const me = await api('/api/me')
-    role.value = me?.role || 'customer'   // 'admin' | 'promoter' | 'customer'
+    role.value = me?.role || 'customer'
   } catch {
     role.value = 'customer'
   }
@@ -228,7 +286,6 @@ async function loadRole () {
 // =================
 // Ambil saldo promotor dari kontrak
 // =================
-
 async function loadPromoterBalance () {
   promoterBalanceWei.value = 0n
   withdrawMsg.value = ''
@@ -238,7 +295,7 @@ async function loadPromoterBalance () {
   if (!ev.value?.chain_event_id) return
 
   try {
-    await ensureChain('amoy')  // sama seperti di buyTicket
+    await ensureChain('amoy')
     const provider = new ethers.BrowserProvider(window.ethereum)
     const signer = await provider.getSigner()
     const contract = new ethers.Contract(TICKETS_CONTRACT, ASIQTIX_TICKETS_ABI, signer)
@@ -258,7 +315,6 @@ async function loadPromoterBalance () {
 //============
 // Tombol tarik dana promotor
 //============
-
 async function withdrawPromoter () {
   withdrawMsg.value = ''
 
@@ -321,7 +377,7 @@ async function withdrawPromoter () {
       } else {
         withdrawMsg.value = `Gagal menarik dana: ${reason}`
       }
-      return // JANGAN kirim transaksi kalau staticCall gagal
+      return
     }
 
     // 2) Kalau lolos staticCall, baru kirim transaksi sebenarnya
@@ -331,7 +387,7 @@ async function withdrawPromoter () {
 
     withdrawTxHash.value = tx.hash
 
-    // 3) Simpan log di backend (opsional, kalau gagal tidak mempengaruhi on-chain)
+    // 3) Simpan log di backend (opsional)
     try {
       await api('/withdraw-log', {
         method: 'POST',
@@ -365,7 +421,6 @@ async function withdrawPromoter () {
     withdrawing.value = false
   }
 }
-///=====================
 
 //====================
 // Withdraw Admin
@@ -435,14 +490,13 @@ async function withdrawAdminFee () {
         method: 'POST',
         body: JSON.stringify({
           amount: amountPol,
-          ref_id: ev.value.id, // id event di DB
+          ref_id: ev.value.id,
           description: `Withdraw fee admin event ${ev.value.title || ev.value.id}`,
           tx_hash: tx.hash
         })
       })
     } catch (err) {
       console.error('[withdraw-log admin] gagal simpan ke backend', err)
-      // tidak usah throw, yang penting penarikan on-chain sudah sukses
     }
 
     adminWithdrawMsg.value = 'Fee admin berhasil ditarik ke wallet.'
@@ -457,8 +511,10 @@ async function withdrawAdminFee () {
     adminWithdrawing.value = false
   }
 }
-//====================
 
+//====================
+// UI computed
+//====================
 const dateText = computed(() => {
   const d = ev.value?.date_iso ? new Date(ev.value.date_iso) : null
   if (!d) return '-'
@@ -470,7 +526,7 @@ const dateText = computed(() => {
 const priceText = computed(() => {
   const n = Number(ev.value?.price_idr || 0)
   if (!n) return '-'
-  return `Rp ${n.toLocaleString('id-ID')}`  // return `${n.toLocaleString('en-US', { maximumFractionDigits: 6 })} POL` diganti 25-11-2025
+  return `Rp ${n.toLocaleString('id-ID')}`
 })
 
 const ticketsRemaining = computed(() => {
@@ -498,7 +554,6 @@ onMounted(async () => {
     const id = String(route.params.id || '')
     ev.value = await api(`/api/events/${id}`)
 
-    // setelah event ke-load, baru cek role & saldo promotor
     await Promise.all([
       loadRole(),
       loadPromoterBalance(),
@@ -559,7 +614,7 @@ onMounted(async () => {
             <button
               class="cta"
               :disabled="isSoldOut || buying"
-              @click="buyTicket"
+              @click="openBuyDialog"
             >
               <span v-if="isSoldOut">SOLD OUT</span>
               <span v-else-if="buying">PROCESSING…</span>
@@ -568,7 +623,7 @@ onMounted(async () => {
 
             <p v-if="buyMsg" class="buy-msg">{{ buyMsg }}</p>
 
-             <!-- PROMOTER TOOLS -->
+            <!-- PROMOTER TOOLS -->
             <div
               v-if="canSeePromoterTools"
               class="promoter-tools"
@@ -628,6 +683,15 @@ onMounted(async () => {
         </div>
       </section>
     </main>
+
+    <!-- DIALOG INPUT JUMLAH TIKET -->
+    <BuyQuantityDialog
+      :open="showBuyDialog"
+      :max="buyMax"
+      :initial="1"
+      @close="showBuyDialog = false"
+      @confirm="confirmBuy"
+    />
 
     <!-- POPUP STRUK PEMBELIAN -->
     <Purchase_Success_Dialog
@@ -725,7 +789,6 @@ onMounted(async () => {
   overflow:auto;
   z-index:1050
 }
-
 .stock{
   margin-top:8px;
   font-size:13px;
@@ -739,7 +802,6 @@ onMounted(async () => {
   margin-top:8px;
   font-size:12px;
 }
-
 .promoter-tools{
   margin-top:16px;
   padding-top:12px;
@@ -763,7 +825,6 @@ onMounted(async () => {
 .promoter-tools .cta.secondary:disabled{
   opacity:.4;
 }
-
 .event-page :deep(.sb-backdrop){ display:none }
 @media (max-width:1100px){
   .hero-inner{ grid-template-columns:1fr }
