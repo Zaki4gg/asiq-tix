@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "cross-env PORT=3001 CORS_ORIGIN=http://localhost:5173 nodemon server.js",
-    "test": "cross-env NODE_ENV=test vitest"
+    "test": "cross-env NODE_ENV=test DOTENV_CONFIG_PATH=.env.test vitest run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.80.0",
