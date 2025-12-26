@@ -222,8 +222,8 @@ async function buyTicket(qty = 1) {
     await api('/purchase', {
       method: 'POST',
       body: JSON.stringify({
-        amount: (Number(ev.value.price_idr || 0) || 0) * qtyInt,
-        quantity: qtyInt, // IMPORTANT
+        amount: (Number(ev.value.price_idr || 0) || 0) * qtyInt, // simpan harga IDR untuk halaman history
+        quantity: qtyInt, // NEW: jumlah tiket yang dibeli
         ref_id: ev.value.id,
         description: 'On-chain purchase',
         tx_hash: tx.hash

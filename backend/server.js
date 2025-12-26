@@ -608,8 +608,8 @@ app.get('/api/my-events', requireAddress, async (req, res) => {
 const topupSchema = z.object({ amount: z.number().positive() })
 const purchaseSchema = z.object({
   amount: z.number().positive(),
-  quantity: z.number().int().min(1).optional(), // NEW
-  ref_id: z.string().optional(),               // event.id
+  quantity: z.number().int().min(1).optional(), // NEW: jumlah tiket per transaksi
+  ref_id: z.string().optional(),      // kita pakai sebagai event.id
   description: z.string().optional(),
   tx_hash: z.string().optional()
 })
@@ -811,13 +811,13 @@ app.post(['/api/purchase', '/purchase'], requireAddress, async (req, res) => {
   const addr = req.walletAddress
   const { amount, quantity, ref_id, description, tx_hash } = parsed.data
 
-  const qty = Number(quantity ?? 1)
-  if (!Number.isFinite(qty) || qty < 1) {
-    return res.status(400).json({ error: 'invalid_quantity' })
-  }
+  // 1) Tentukan qty
+  let qty = Number(quantity ?? 0)
+  if (!Number.isFinite(qty) || qty < 1) qty = 0
 
+  // 2) Ambil event (kalau ada) untuk validasi quota + ambil harga resmi
   let ev = null
-  let unitPrice = 0
+  let unitPriceIdr = 0
 
   if (ref_id) {
     const { data: evData, error: evErr } = await supabase
@@ -829,7 +829,6 @@ app.post(['/api/purchase', '/purchase'], requireAddress, async (req, res) => {
     if (evErr || !evData) {
       return res.status(400).json({ error: 'Event not found' })
     }
-
     ev = evData
 
     const sold = Number(ev.sold_tickets ?? 0)
@@ -838,58 +837,78 @@ app.post(['/api/purchase', '/purchase'], requireAddress, async (req, res) => {
 
     if (total <= 0) return res.status(400).json({ error: 'This event has no ticket quota' })
     if (remaining <= 0) return res.status(400).json({ error: 'Tickets sold out' })
+
+    // kalau qty belum dikirim dari frontend, coba infer dari amount
+    if (!qty) {
+      const unit = Number(ev.price_idr ?? 0) || 0
+      if (unit > 0) {
+        const inferred = Math.round(Number(amount) / unit)
+        if (Number.isFinite(inferred) && inferred >= 1) qty = inferred
+      }
+    }
+    if (!qty) qty = 1
+
     if (qty > remaining) return res.status(400).json({ error: 'Quantity exceeds remaining tickets' })
 
-    // Harga resmi dari DB (lebih aman daripada percaya frontend)
-    unitPrice = Number(ev.price_idr ?? 0) || 0
-  }
-
-  // Fallback: kalau event tidak ada / price_idr 0, pakai amount dari frontend dibagi qty
-  if (!unitPrice) {
-    unitPrice = Math.max(1, Math.round(Number(amount) / qty))
-  }
-
-  // 1) Update sold_tickets sesuai qty
-  if (ref_id && ev) {
-    const sold = Number(ev.sold_tickets ?? 0)
-
-    const { error: updErr } = await supabase
-      .from('events')
-      .update({ sold_tickets: sold + qty })
-      .eq('id', ref_id)
-
-    if (updErr) {
-      return res.status(500).json({ error: updErr.message })
+    unitPriceIdr = Number(ev.price_idr ?? 0) || 0
+    if (unitPriceIdr <= 0) {
+      return res.status(400).json({ error: 'Invalid event price' })
     }
   }
 
-  // 2) Insert transaksi PER TIKET (jadi DB “terhitung banyak tiket” + QR scan 1 tiket = 1 row)
+  if (!qty) qty = 1
+  if (qty > 20) return res.status(400).json({ error: 'quantity_too_large' })
+
+  // 3) Harga per tiket:
+  // - pakai price_idr dari event kalau ada
+  // - fallback: amount/qty (untuk kompatibilitas)
+  if (!unitPriceIdr) {
+    unitPriceIdr = Math.max(1, Math.round(Number(amount) / qty))
+  }
+
+  // 4) Insert transaksi PER TIKET (supaya:
+  //    - UI customer nampilin jumlah tiket bener
+  //    - QR scan 1 tiket = 1 row transaksi)
   const txsToInsert = Array.from({ length: qty }, (_, i) => ({
     wallet: addr,
     kind: 'purchase',
-    amount: -Math.abs(Number(unitPrice)),     // per tiket
+    amount: -Math.abs(Number(unitPriceIdr)),
     ref_id: ref_id || null,
     description: (description || 'Ticket purchase') + (qty > 1 ? ` (${i + 1}/${qty})` : ''),
     status: 'confirmed',
     tx_hash: tx_hash || null
   }))
 
-  const { data, error } = await supabase
+  const { data: inserted, error: insErr } = await supabase
     .from('transactions')
     .insert(txsToInsert)
     .select()
 
-  if (error) {
-    return res.status(500).json({ error: error.message })
+  if (insErr) {
+    return res.status(500).json({ error: insErr.message })
   }
 
-  // Emit realtime untuk wallet yang beli
-  // (emitTx cuma terima 1 tx, jadi kirim tx terakhir saja)
-  if (Array.isArray(data) && data.length) {
-    emitTx(addr, data[data.length - 1])
+  // 5) Update sold_tickets sesuai qty (off-chain counter)
+  if (ref_id && ev) {
+    const sold = Number(ev.sold_tickets ?? 0)
+    const { error: updErr } = await supabase
+      .from('events')
+      .update({ sold_tickets: sold + qty })
+      .eq('id', ref_id)
+
+    if (updErr) {
+      // NOTE: tanpa transaksi DB, kita tidak bisa rollback insert dengan aman.
+      // Tapi minimal beri error jelas.
+      return res.status(500).json({ error: updErr.message })
+    }
   }
 
-  return res.json({ ok: true, quantity: qty, txs: data })
+  // 6) Realtime: kirim SEMUA tiket yang baru dibuat
+  if (Array.isArray(inserted)) {
+    for (const row of inserted) emitTx(addr, row)
+  }
+
+  return res.json({ ok: true, quantity: qty, txs: inserted })
 })
 
 // POST withdraw-log — catat penarikan dana (promoter / admin) ke ledger
