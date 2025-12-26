@@ -12,4 +12,22 @@ export default defineConfig({
     },
   },
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+  
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    // jika Anda import CSS di component, ini membantu
+    css: true,
+    // setup global mocks (optional tapi disarankan)
+    setupFiles: './vitest.setup.js',
+    // pola file test
+    include: ['src/**/*.test.{js,ts}', 'src/**/*.spec.{js,ts}'],
+    // coverage (white-box biasanya menonjolkan coverage)
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      reportsDirectory: './coverage',
+      exclude: ['node_modules/', 'src/main.*', 'src/router/**']
+    }
+  }
 })

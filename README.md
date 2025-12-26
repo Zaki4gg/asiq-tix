@@ -42,3 +42,6 @@ npm run build
 ```sh
 npm run lint
 ```
+
+blackbox: npm i -D vitest supertest cross-env
+whotebox: npm i -D vitest jsdom @vue/test-utils @vitest/coverage-v8
