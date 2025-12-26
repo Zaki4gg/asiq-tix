@@ -18,9 +18,8 @@ const router = createRouter({
     { path: '/wallet', name: 'wallet', component: () => import('@/views/Wallet.vue') },
     { path: '/history', name: 'history', component: () => import('@/views/History.vue') },
     { path: '/scan', name: 'scan', component: ScanQR, meta: { requiresAuth: true } },
-    { path: '/promoter/events/:id/transactions', name: 'promoter-event-transactions', component: () => import('@/views/Promoter_EventTransactions.vue'),
-  meta: { requiresWallet: true }
-},
+    { path: '/promoter/events/:id/transactions', name: 'promoter-event-transactions', component: () => import('@/views/Promoter_EventTransactions.vue'), meta: { requiresWallet: true }},
+    { path: '/admin/events/:id/transactions', name: 'admin-event-transactions', component: () => import('@/views/Admin_EventTransactions.vue'), meta: { requiresWallet: true }},
     { path: '/:pathMatch(.*)*', redirect: { name: 'login' } },
   ],
 })

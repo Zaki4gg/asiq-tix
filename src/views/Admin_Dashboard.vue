@@ -1,12 +1,14 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import SideNavSB from '@/components/SideNavSB.vue'
 import { ethers } from 'ethers'
 import { useMetamask } from '@/composables/useMetamask'
 import { ASIQTIX_TICKETS_ABI } from '@/abi/asiqtixTicketsSimpleV3'
 
 const route = useRoute()
+const router = useRouter()
+
 const sidebarOpen = ref(false)
 const toggleSidebar = () => (sidebarOpen.value = !sidebarOpen.value)
 watch(() => route.fullPath, () => (sidebarOpen.value = false))
@@ -81,7 +83,6 @@ async function syncWalletSilent () {
     const accs = await window.ethereum.request({ method: 'eth_accounts' })
     if (Array.isArray(accs) && accs[0]) account.value = accs[0]
   } catch (e) {
-    // jangan ganggu UX untuk silent sync
     console.warn('syncWalletSilent error:', e)
   }
 }
@@ -177,10 +178,7 @@ async function setPromoterOnchain (active) {
 
   promoterActionLoading.value = true
   try {
-    // Pastikan wallet connect (Polygonscan-style: prompt only on write)
     if (!account.value) await connectWallet()
-
-    // Pastikan chain Amoy (tidak auto-reload karena kita tidak pakai connect() dari composable di sini)
     await ensureChain('amoy')
 
     const provider = new ethers.BrowserProvider(window.ethereum)
@@ -203,7 +201,15 @@ async function setPromoterOnchain (active) {
   }
 }
 
-// --- API helper (sama pola dengan EventDetailView) ---
+// =========================
+// NAV: Admin → Detail transaksi event
+// =========================
+function goDetail (eventId) {
+  if (!eventId) return
+  router.push({ name: 'admin-event-transactions', params: { id: eventId } })
+}
+
+// --- API helper ---
 const RAW_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:3001').replace(/\/+$/, '')
 const API_HOST = RAW_BASE.replace(/\/api$/i, '')
 const wallet = () => (localStorage.getItem('walletAddress') || '').toString()
@@ -391,7 +397,7 @@ onMounted(async () => {
 
         <p v-if="errorMsg" class="error">{{ errorMsg }}</p>
 
-        <div v-if="!loading && rows.length === 0" class="empty">
+        <div v-if="!loading && !errorMsg && rows.length === 0" class="empty">
           Belum ada event yang tercatat.
         </div>
 
@@ -407,6 +413,7 @@ onMounted(async () => {
                 <th>Pendapatan (Rp)</th>
                 <th>Status</th>
                 <th>Promoter</th>
+                <th>Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -429,6 +436,11 @@ onMounted(async () => {
                 </td>
                 <td>
                   <span class="mono">{{ ev.promoterWallet || '-' }}</span>
+                </td>
+                <td>
+                  <button class="btn-detail" type="button" @click="goDetail(ev.id)">
+                    Detail
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -839,6 +851,20 @@ onMounted(async () => {
   color: #e5e7eb;
 }
 
+/* NEW: button detail */
+.btn-detail{
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(244,241,222,.25);
+  background: rgba(244,241,222,.18);
+  color: #f4f1de;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-detail:hover{ background: rgba(244,241,222,.24); }
+
 /* Promoter management */
 .promoter-meta{
   display: grid;
@@ -933,7 +959,7 @@ onMounted(async () => {
 .mono{
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 11px;
-  overflow-wrap: anywhere; /* alamat wallet panjang tetap wrap */
+  overflow-wrap: anywhere;
 }
 
 .error{
@@ -991,5 +1017,4 @@ onMounted(async () => {
     padding-bottom: max(18px, env(safe-area-inset-bottom));
   }
 }
-
 </style>

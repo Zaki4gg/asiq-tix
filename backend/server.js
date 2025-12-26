@@ -437,6 +437,41 @@ app.post('/api/upload', requireAddress, requireRole(['admin', 'promoter']), uplo
 })
 
 /* =========================
+   ADMIN: EVENT TRANSACTIONS
+   ========================= */
+// Admin bisa lihat pembelian tiket untuk event manapun
+// GET /api/admin/events/:id/transactions
+app.get('/api/admin/events/:id/transactions', requireAdmin, async (req, res) => {
+  const eventId = String(req.params.id || '')
+
+  if (!eventId) return res.status(400).json({ error: 'event_id_required' })
+
+  // 1) Pastikan event ada
+  const { data: ev, error: evErr } = await supabase
+    .from('events')
+    .select('id,title,venue,date_iso,promoter_wallet')
+    .eq('id', eventId)
+    .maybeSingle()
+
+  if (evErr) return res.status(500).json({ error: evErr.message })
+  if (!ev) return res.status(404).json({ error: 'event_not_found' })
+
+  // 2) Ambil transaksi purchase untuk event tsb
+  // NOTE: JANGAN select kolom yang tidak ada (contoh: quantity)
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('id,wallet,created_at,description,status,tx_hash,scanned,scanned_at')
+    .eq('kind', 'purchase')
+    .eq('ref_id', eventId)
+    .order('created_at', { ascending: false })
+    .limit(500)
+
+  if (error) return res.status(500).json({ error: error.message })
+  return res.json({ event: ev, items: data || [] })
+})
+
+
+/* =========================
    EVENTS CRUD
    ========================= */
 app.post('/api/events', requireAddress, async (req, res) => {
