@@ -608,7 +608,8 @@ app.get('/api/my-events', requireAddress, async (req, res) => {
 const topupSchema = z.object({ amount: z.number().positive() })
 const purchaseSchema = z.object({
   amount: z.number().positive(),
-  ref_id: z.string().optional(),      // kita pakai sebagai event.id
+  quantity: z.number().int().min(1).optional(), // NEW
+  ref_id: z.string().optional(),               // event.id
   description: z.string().optional(),
   tx_hash: z.string().optional()
 })
@@ -808,69 +809,87 @@ app.post(['/api/purchase', '/purchase'], requireAddress, async (req, res) => {
   }
 
   const addr = req.walletAddress
-  const { amount, ref_id, description, tx_hash } = parsed.data
+  const { amount, quantity, ref_id, description, tx_hash } = parsed.data
+
+  const qty = Number(quantity ?? 1)
+  if (!Number.isFinite(qty) || qty < 1) {
+    return res.status(400).json({ error: 'invalid_quantity' })
+  }
+
+  let ev = null
+  let unitPrice = 0
 
   if (ref_id) {
-    const { data: ev, error: evErr } = await supabase
+    const { data: evData, error: evErr } = await supabase
       .from('events')
       .select('*')
       .eq('id', ref_id)
       .single()
 
-    if (evErr || !ev) {
+    if (evErr || !evData) {
       return res.status(400).json({ error: 'Event not found' })
     }
+
+    ev = evData
 
     const sold = Number(ev.sold_tickets ?? 0)
     const total = Number(ev.total_tickets ?? 0)
     const remaining = total - sold
 
-    if (total <= 0) {
-      return res.status(400).json({ error: 'This event has no ticket quota' })
-    }
+    if (total <= 0) return res.status(400).json({ error: 'This event has no ticket quota' })
+    if (remaining <= 0) return res.status(400).json({ error: 'Tickets sold out' })
+    if (qty > remaining) return res.status(400).json({ error: 'Quantity exceeds remaining tickets' })
 
-    if (remaining <= 0) {
-      return res.status(400).json({ error: 'Tickets sold out' })
-    }
+    // Harga resmi dari DB (lebih aman daripada percaya frontend)
+    unitPrice = Number(ev.price_idr ?? 0) || 0
+  }
 
-    // Versi simple: satu pembelian = 1 tiket
+  // Fallback: kalau event tidak ada / price_idr 0, pakai amount dari frontend dibagi qty
+  if (!unitPrice) {
+    unitPrice = Math.max(1, Math.round(Number(amount) / qty))
+  }
+
+  // 1) Update sold_tickets sesuai qty
+  if (ref_id && ev) {
+    const sold = Number(ev.sold_tickets ?? 0)
+
     const { error: updErr } = await supabase
       .from('events')
-      .update({ sold_tickets: sold + 1 })
+      .update({ sold_tickets: sold + qty })
       .eq('id', ref_id)
 
     if (updErr) {
       return res.status(500).json({ error: updErr.message })
     }
-    // Jangan percaya angka dari frontend, pakai harga resmi event
-    // finalAmount = Number(ev.price_idr)  // finalAmount = Number(ev.price_pol) diganti 25-11-2025
   }
-  // let finalAmount = Number(amount)
 
-  const tx = {
+  // 2) Insert transaksi PER TIKET (jadi DB “terhitung banyak tiket” + QR scan 1 tiket = 1 row)
+  const txsToInsert = Array.from({ length: qty }, (_, i) => ({
     wallet: addr,
     kind: 'purchase',
-    amount: -Math.abs(Number(amount)),
+    amount: -Math.abs(Number(unitPrice)),     // per tiket
     ref_id: ref_id || null,
-    description: description || 'Ticket purchase',
+    description: (description || 'Ticket purchase') + (qty > 1 ? ` (${i + 1}/${qty})` : ''),
     status: 'confirmed',
     tx_hash: tx_hash || null
-  }
+  }))
 
   const { data, error } = await supabase
-  .from('transactions')
-  .insert(tx)
-  .select()
-  .single()
+    .from('transactions')
+    .insert(txsToInsert)
+    .select()
 
   if (error) {
     return res.status(500).json({ error: error.message })
   }
 
-  emitTx(addr, data)
-  res.json({ ok: true, tx: data })
+  // Emit realtime untuk wallet yang beli
+  // (emitTx cuma terima 1 tx, jadi kirim tx terakhir saja)
+  if (Array.isArray(data) && data.length) {
+    emitTx(addr, data[data.length - 1])
+  }
 
-  // Kalau ada ref_id → anggap itu ID event yang dibeli
+  return res.json({ ok: true, quantity: qty, txs: data })
 })
 
 // POST withdraw-log — catat penarikan dana (promoter / admin) ke ledger
