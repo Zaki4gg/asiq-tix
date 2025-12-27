@@ -46,8 +46,9 @@ async function fetchPolIdrRate() {
 const PORT = Number(process.env.PORT) || 3001
 const IS_PROD = process.env.NODE_ENV === 'production'
 const IS_TEST = process.env.NODE_ENV === 'test'
-const EVENT_CREATE_WINDOW_DAYS = Number(process.env.EVENT_CREATE_WINDOW_DAYS || 7)
+const EVENT_MIN_LEAD_DAYS = Number(process.env.EVENT_MIN_LEAD_DAYS || process.env.EVENT_CREATE_WINDOW_DAYS || 7)
 const APP_TZ_OFFSET_MINUTES = Number(process.env.APP_TZ_OFFSET_MINUTES || 480)
+
 
 const ORIGINS_ENV = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '')
   .split(',').map(s => s.trim()).filter(Boolean)
@@ -251,8 +252,8 @@ function getStartOfTodayUtcMs(nowMs = Date.now()) {
   return startShiftedUtcMs - offsetMs
 }
 
-function getCreateWindowCutoffUtcMs(nowMs = Date.now()) {
-  return getStartOfTodayUtcMs(nowMs) + EVENT_CREATE_WINDOW_DAYS * 86_400_000
+function getMinAllowedUtcMs(nowMs = Date.now()) {
+  return getStartOfTodayUtcMs(nowMs) + EVENT_MIN_LEAD_DAYS * 86_400_000
 }
 
 function validateEventDateIsoOrThrow(dateIso, nowMs = Date.now()) {
@@ -269,11 +270,11 @@ function validateEventDateIsoOrThrow(dateIso, nowMs = Date.now()) {
     throw err
   }
 
-  const cutoffMs = getCreateWindowCutoffUtcMs(nowMs)
-  if (eventMs > cutoffMs) {
-    const err = new Error('event_date_out_of_window')
-    err.code = 'event_date_out_of_window'
-    err.cutoff_iso = new Date(cutoffMs).toISOString()
+  const minAllowedMs = getMinAllowedUtcMs(nowMs)
+  if (eventMs < minAllowedMs) {
+    const err = new Error('event_date_too_soon')
+    err.code = 'event_date_too_soon'
+    err.min_allowed_iso = new Date(minAllowedMs).toISOString()
     throw err
   }
 }
@@ -539,8 +540,8 @@ app.post('/api/events', requireAddress, async (req, res) => {
   } catch (e) {
     return res.status(400).json({
       error: e.code || 'invalid_event_date',
-      cutoff_iso: e.cutoff_iso || null,
-      window_days: EVENT_CREATE_WINDOW_DAYS
+      min_allowed_iso: e.min_allowed_iso || new Date(getMinAllowedUtcMs()).toISOString(),
+      lead_days: EVENT_MIN_LEAD_DAYS
     })
   }
 
@@ -593,8 +594,8 @@ app.put('/api/events/:id', requireAddress, async (req, res) => {
     } catch (e) {
       return res.status(400).json({
         error: e.code || 'invalid_event_date',
-        cutoff_iso: e.cutoff_iso || null,
-        window_days: EVENT_CREATE_WINDOW_DAYS
+        min_allowed_iso: e.min_allowed_iso || new Date(getMinAllowedUtcMs()).toISOString(),
+        lead_days: EVENT_MIN_LEAD_DAYS
       })
     }
   }

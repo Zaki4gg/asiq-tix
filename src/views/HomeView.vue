@@ -339,10 +339,6 @@ function minEventDateLocalValue() {
   return toDateTimeLocalValue(d)
 }
 
-function maxEventDateLocalValue() {
-  return toDateTimeLocalValue(cutoffLocal(new Date()))
-}
-
 function toIso(dtLocal) {
   if (!dtLocal) return ''
   const d = new Date(dtLocal)
@@ -640,7 +636,6 @@ function imgFor (ev) {
                 step="60"
                 v-model="newEvent.date_iso"
                 :min="minEventDateLocalValue()"
-                :max="maxEventDateLocalValue()"
               />
             </label>
             <label>Venue <input v-model="newEvent.venue" /></label>
@@ -715,9 +710,8 @@ function imgFor (ev) {
               <input
                 type="datetime-local"
                 step="60"
-                v-model="edit.date_iso"
+                v-model="newEvent.date_iso"
                 :min="minEventDateLocalValue()"
-                :max="maxEventDateLocalValue()"
               />
             </label>
             <label>Venue <input v-model="edit.venue" /></label>
