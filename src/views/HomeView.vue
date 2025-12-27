@@ -288,6 +288,61 @@ const priceInPol = computed(() => {
   return pol
 })
 
+const EVENT_CREATE_WINDOW_DAYS = 7
+
+function startOfTodayLocal(now = new Date()) {
+  const d = new Date(now)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function cutoffLocal(now = new Date()) {
+  const s = startOfTodayLocal(now)
+  s.setDate(s.getDate() + EVENT_CREATE_WINDOW_DAYS)
+  return s
+}
+
+function assertEventDateAllowedFromLocalInput(dtLocal) {
+  if (!dtLocal) throw new Error('Tanggal wajib diisi')
+
+  const eventDate = new Date(dtLocal)
+  if (Number.isNaN(eventDate.getTime())) throw new Error('Tanggal tidak valid')
+
+  const now = new Date()
+  if (eventDate.getTime() < now.getTime()) {
+    throw new Error('Tanggal event tidak boleh di masa lalu')
+  }
+
+  const cutoff = cutoffLocal(now)
+  if (eventDate.getTime() > cutoff.getTime()) {
+    const cutoffText = cutoff.toLocaleString('id-ID', {
+      year: 'numeric',
+      month: 'long',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+    throw new Error(`Tanggal event maksimal sampai ${cutoffText}`)
+  }
+}
+
+function toDateTimeLocalValue(d) {
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+function minEventDateLocalValue() {
+  const now = new Date()
+  const d = new Date(now)
+  d.setSeconds(0, 0)
+  if (d.getTime() < now.getTime()) d.setMinutes(d.getMinutes() + 1)
+  return toDateTimeLocalValue(d)
+}
+
+function maxEventDateLocalValue() {
+  return toDateTimeLocalValue(cutoffLocal(new Date()))
+}
+
 function toIso(dtLocal) {
   if (!dtLocal) return ''
   const d = new Date(dtLocal)
@@ -300,6 +355,7 @@ async function createEvent() {
     if (!newEvent.title || !newEvent.date_iso || !newEvent.venue) {
       throw new Error('Title/Date/Venue wajib diisi')
     }
+    assertEventDateAllowedFromLocalInput(newEvent.date_iso)
 
     const priceIdr = Number(newEvent.price_idr)
     if (!priceIdr || priceIdr <= 0) {
@@ -458,10 +514,13 @@ async function createEvent() {
 }
 
 const editId = ref(null)
+
+// Mengganti price_pol menjadi price_idr
 const edit = reactive({
   title: '', date_iso: '', venue: '', description: '',
-  image_url: '', price_pol: 0, total_tickets: 0, listed: true
+  image_url: '', price_idr: 0, total_tickets: 0, listed: true
 })
+
 
 function startEdit(ev) {
   editId.value = ev.id
@@ -483,6 +542,7 @@ function cancelEdit() { showEdit.value = false; editId.value = null }
 
 async function saveEdit() {
   try {
+    assertEventDateAllowedFromLocalInput(edit.date_iso)
     const payload = {
       title: edit.title,
       date_iso: toIso(edit.date_iso),
@@ -573,7 +633,16 @@ function imgFor (ev) {
         <form class="form" @submit.prevent="createEvent">
           <div class="scroll">
             <label>Title <input v-model="newEvent.title" /></label>
-            <label>Date (UTC) <input type="datetime-local" step="60" v-model="newEvent.date_iso" /></label>
+            <label>
+              Date (UTC)
+              <input
+                type="datetime-local"
+                step="60"
+                v-model="newEvent.date_iso"
+                :min="minEventDateLocalValue()"
+                :max="maxEventDateLocalValue()"
+              />
+            </label>
             <label>Venue <input v-model="newEvent.venue" /></label>
             <label class="file"><span>Image</span><input type="file" accept="image/*" @change="onNewImageChange" /></label>
             <div v-if="newImagePreview || newEvent.image_url" class="img-preview" :style="{ backgroundImage: `url(${newImagePreview || newEvent.image_url})` }"></div>
@@ -641,7 +710,16 @@ function imgFor (ev) {
         <form class="form" @submit.prevent="saveEdit">
           <div class="scroll">
             <label>Title <input v-model="edit.title" /></label>
-            <label>Date (UTC) <input type="datetime-local" step="60" v-model="edit.date_iso" /></label>
+            <label>
+              Date (UTC)
+              <input
+                type="datetime-local"
+                step="60"
+                v-model="edit.date_iso"
+                :min="minEventDateLocalValue()"
+                :max="maxEventDateLocalValue()"
+              />
+            </label>
             <label>Venue <input v-model="edit.venue" /></label>
             <label>Image URL <input v-model="edit.image_url" placeholder="https://..." /></label>
             <label>Price (IDR) <input type="number" min="0" step="1" v-model.number="edit.price_idr" /></label>

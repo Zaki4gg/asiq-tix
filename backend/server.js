@@ -46,6 +46,8 @@ async function fetchPolIdrRate() {
 const PORT = Number(process.env.PORT) || 3001
 const IS_PROD = process.env.NODE_ENV === 'production'
 const IS_TEST = process.env.NODE_ENV === 'test'
+const EVENT_CREATE_WINDOW_DAYS = Number(process.env.EVENT_CREATE_WINDOW_DAYS || 7)
+const APP_TZ_OFFSET_MINUTES = Number(process.env.APP_TZ_OFFSET_MINUTES || 480)
 
 const ORIGINS_ENV = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '')
   .split(',').map(s => s.trim()).filter(Boolean)
@@ -237,6 +239,45 @@ async function isOnchainPromoter (addr) {
 /* =========================
    VALIDASI PAYLOAD
    ========================= */
+function getStartOfTodayUtcMs(nowMs = Date.now()) {
+  const offsetMs = APP_TZ_OFFSET_MINUTES * 60_000
+  const shifted = new Date(nowMs + offsetMs)
+  const startShiftedUtcMs = Date.UTC(
+    shifted.getUTCFullYear(),
+    shifted.getUTCMonth(),
+    shifted.getUTCDate(),
+    0, 0, 0, 0
+  )
+  return startShiftedUtcMs - offsetMs
+}
+
+function getCreateWindowCutoffUtcMs(nowMs = Date.now()) {
+  return getStartOfTodayUtcMs(nowMs) + EVENT_CREATE_WINDOW_DAYS * 86_400_000
+}
+
+function validateEventDateIsoOrThrow(dateIso, nowMs = Date.now()) {
+  const eventMs = Date.parse(dateIso)
+  if (Number.isNaN(eventMs)) {
+    const err = new Error('invalid_event_date')
+    err.code = 'invalid_event_date'
+    throw err
+  }
+
+  if (eventMs < nowMs) {
+    const err = new Error('event_date_in_past')
+    err.code = 'event_date_in_past'
+    throw err
+  }
+
+  const cutoffMs = getCreateWindowCutoffUtcMs(nowMs)
+  if (eventMs > cutoffMs) {
+    const err = new Error('event_date_out_of_window')
+    err.code = 'event_date_out_of_window'
+    err.cutoff_iso = new Date(cutoffMs).toISOString()
+    throw err
+  }
+}
+
 const eventCreateSchema = z.object({
   title: z.string().min(1).max(160),
   date_iso: z.string().min(10),
@@ -493,6 +534,16 @@ app.post('/api/events', requireAddress, async (req, res) => {
   }
 
   const p = parsed.data
+  try {
+    validateEventDateIsoOrThrow(p.date_iso)
+  } catch (e) {
+    return res.status(400).json({
+      error: e.code || 'invalid_event_date',
+      cutoff_iso: e.cutoff_iso || null,
+      window_days: EVENT_CREATE_WINDOW_DAYS
+    })
+  }
+
   const id = nanoid(12)   // 🔴 WAJIB: generate primary key
 
   const { data, error } = await supabase.from('events').insert([{
@@ -534,6 +585,18 @@ app.put('/api/events/:id', requireAddress, async (req, res) => {
 
   if (!isAdmin && !isOwner) {
     return res.status(403).json({ error: 'bukan_admin_atau_pemilik_event' }) // 'not_event_owner'
+  }
+
+  if (typeof req.body?.date_iso === 'string') {
+    try {
+      validateEventDateIsoOrThrow(req.body.date_iso)
+    } catch (e) {
+      return res.status(400).json({
+        error: e.code || 'invalid_event_date',
+        cutoff_iso: e.cutoff_iso || null,
+        window_days: EVENT_CREATE_WINDOW_DAYS
+      })
+    }
   }
 
   // 3. baru boleh update
