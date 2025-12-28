@@ -13,8 +13,8 @@ const sidebarOpen = ref(false)
 const toggleSidebar = () => (sidebarOpen.value = !sidebarOpen.value)
 watch(() => route.fullPath, () => (sidebarOpen.value = false))
 
-const { account, ensureChain } = useMetamask() // ⬅️ ambil connect & ensureChain juga
-const TICKETS_CONTRACT = import.meta.env.VITE_TICKETS_CONTRACT || ''  // ⬅️ sama kayak di EventDetailView
+const { account, ensureChain } = useMetamask()
+const TICKETS_CONTRACT = import.meta.env.VITE_TICKETS_CONTRACT || ''
 const rootStyle = computed(() => ({ '--hero-img': 'url(/Background.png)' }))
 
 const RAW_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:3001').replace(/\/+$/, '')
@@ -33,14 +33,11 @@ async function convertIdrToWei(amountIdr) {
     body: JSON.stringify({ amount_idr: amountIdr })
   })
   if (!res || !res.price_wei) throw new Error('Gagal konversi')
-  // kalau backend juga kirim idr_per_pol, boleh sekalian simpan buat tampilan:
   if (res.idr_per_pol) {
     polRateIdr.value = Number(res.idr_per_pol)
   }
   return BigInt(res.price_wei)
 }
-
-
 
 async function api(path, options = {}) {
   const full = path.startsWith('/api') ? path : `/api${path.startsWith('/') ? path : `/${path}`}`
@@ -82,18 +79,13 @@ const heroTitle = computed(() =>
     ? 'CREATE A NEW EVENT'
     : 'UPCOMING CONCERT'
 )
-// const heroTitle = computed(() => (isAdmin.value ? 'CREATE A NEW EVENT' : 'UPCOMING CONCERT'))
 
 const walletAddress = computed(() => (getWallet() || ''). toLowerCase())
-function canManageEvent (ev) {
-  // Admin boleh semua
+function canManageEvent(ev) {
   if (isAdmin.value) return true
-
-  // Promoter hanya boleh event yang promoter_wallet = wallet-nya
   if (isPromoter.value) {
     return (ev.promoter_wallet || '').toLowerCase() === walletAddress.value
   }
-  // Customer nggak boleh apa-apa
   return false
 }
 
@@ -112,11 +104,11 @@ async function loadRole() {
   const w = getWallet()
   if (!w) {
     role.value = 'customer'
-    return }
+    return
+  }
   try {
     const me = await api('/api/me')
-    role.value = me?.role || 'customer' //backend sekarang balikin 3 level  //'admin' ? 'admin' : 'user'
-    // localStorage.setItem('user_role', role.value) //opsional : simpan biar komponen lain bisa baca cepat
+    role.value = me?.role || 'customer'
   } catch {
     role.value = 'customer'
   }
@@ -127,7 +119,8 @@ const errorMsg = ref('')
 const events = ref([])
 
 async function loadEvents() {
-  loading.value = true; errorMsg.value = ''
+  loading.value = true
+  errorMsg.value = ''
   try {
     const qs = isAdmin.value ? '?all=1' : ''
     const res = await api(`/api/events${qs}`)
@@ -141,7 +134,8 @@ async function loadEvents() {
 
 function onAccountsChanged(accs) {
   account.value = accs?.[0] || ''
-  loadRole(); loadEvents()
+  loadRole()
+  loadEvents()
 }
 onMounted(async () => {
   await hydrateAccount()
@@ -152,7 +146,10 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (window?.ethereum?.removeListener) window.ethereum.removeListener('accountsChanged', onAccountsChanged)
 })
-watch(account, async () => { await loadRole(); await loadEvents() })
+watch(account, async () => {
+  await loadRole()
+  await loadEvents()
+})
 
 const searchQuery = ref('')
 const filteredEvents = computed(() => {
@@ -183,19 +180,16 @@ const newEvent = reactive({
 const newImageFile = ref(null)
 const newImagePreview = ref('')
 const uploading = ref(false)
-// gambar NFT
+
 const newNftImageFile = ref(null)
 const newNftImagePreview = ref('')
 const newNftImageUrl = ref('')
 
-// tampilan harga rupiah (dengan titik), sedangkan newEvent.price_idr tetap number polos
 const priceIdrDisplay = ref('')
-// rate POL/IDR dari backend
-const polRateIdr = ref(null)      // 1 POL = berapa IDR
+const polRateIdr = ref(null)
 const polRateLoading = ref(false)
 const polRateError = ref('')
 
-// --- FORMAT HARGA IDR ---
 function formatIdr(num) {
   if (!num) return ''
   const s = String(num)
@@ -204,8 +198,6 @@ function formatIdr(num) {
 
 function onPriceIdrInput(e) {
   let raw = e.target.value || ''
-
-  // buang semua selain angka
   raw = raw.replace(/[^\d]/g, '')
 
   if (!raw) {
@@ -219,7 +211,6 @@ function onPriceIdrInput(e) {
   priceIdrDisplay.value = formatIdr(num)
 }
 
-// kalau newEvent.price_idr berubah dari kode, tampilan ikut berubah
 watch(
   () => newEvent.price_idr,
   (val) => {
@@ -234,7 +225,6 @@ function onNewImageChange(e) {
   newImagePreview.value = f ? URL.createObjectURL(f) : ''
 }
 
-// --- HANDLE GAMBAR NFT ---
 function onNftImageChange(e) {
   const file = e.target.files?.[0]
   if (!file) {
@@ -254,12 +244,11 @@ function onNftImageChange(e) {
   newNftImagePreview.value = URL.createObjectURL(file)
 }
 
-// --- RATE POL/IDR + KONVERSI IDR -> WEI ---
 async function fetchPolRate() {
   try {
     polRateLoading.value = true
     polRateError.value = ''
-    const res = await api('/api/price/pol')   // backend kamu yang sekarang
+    const res = await api('/api/price/pol')
     const price = Number(res?.price_idr || 0)
     if (!price) throw new Error('Harga tidak valid')
     polRateIdr.value = price
@@ -271,14 +260,6 @@ async function fetchPolRate() {
   }
 }
 
-// dipanggil otomatis saat modal Create dibuka
-watch(showCreate, (val) => {
-  if (val) {
-    fetchPolRate()
-  }
-})
-
-// konversi untuk tampilan realtime
 const priceInPol = computed(() => {
   if (!polRateIdr.value) return null
   const idr = Number(newEvent.price_idr || 0)
@@ -288,7 +269,12 @@ const priceInPol = computed(() => {
   return pol
 })
 
-const EVENT_CREATE_WINDOW_DAYS = 7
+function toDateTimeLocalValue(d) {
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+const EVENT_CREATE_MIN_DAYS = 7
 
 function startOfTodayLocal(now = new Date()) {
   const d = new Date(now)
@@ -296,13 +282,44 @@ function startOfTodayLocal(now = new Date()) {
   return d
 }
 
-function cutoffLocal(now = new Date()) {
-  const s = startOfTodayLocal(now)
-  s.setDate(s.getDate() + EVENT_CREATE_WINDOW_DAYS)
-  return s
+function minAllowedCreateEventDateLocal(now = new Date()) {
+  const d = startOfTodayLocal(now)
+  d.setDate(d.getDate() + EVENT_CREATE_MIN_DAYS)
+  return d
 }
 
-function assertEventDateAllowedFromLocalInput(dtLocal) {
+function minEventDateLocalValue() {
+  return toDateTimeLocalValue(minAllowedCreateEventDateLocal(new Date()))
+}
+
+function minEditDateLocalValue() {
+  const now = new Date()
+  const d = new Date(now)
+  d.setSeconds(0, 0)
+  if (d.getTime() < now.getTime()) d.setMinutes(d.getMinutes() + 1)
+  return toDateTimeLocalValue(d)
+}
+
+function assertCreateEventDateAllowedFromLocalInput(dtLocal) {
+  if (!dtLocal) throw new Error('Tanggal wajib diisi')
+
+  const eventDate = new Date(dtLocal)
+  if (Number.isNaN(eventDate.getTime())) throw new Error('Tanggal tidak valid')
+
+  const minDate = minAllowedCreateEventDateLocal(new Date())
+  if (eventDate.getTime() < minDate.getTime()) {
+    const minText = minDate.toLocaleString('id-ID', {
+      year: 'numeric',
+      month: 'long',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+    throw new Error(`Tanggal event minimal ${minText}`)
+  }
+}
+
+function assertEditEventDateNotPastFromLocalInput(dtLocal) {
   if (!dtLocal) throw new Error('Tanggal wajib diisi')
 
   const eventDate = new Date(dtLocal)
@@ -312,32 +329,21 @@ function assertEventDateAllowedFromLocalInput(dtLocal) {
   if (eventDate.getTime() < now.getTime()) {
     throw new Error('Tanggal event tidak boleh di masa lalu')
   }
+}
 
-  const cutoff = cutoffLocal(now)
-  if (eventDate.getTime() > cutoff.getTime()) {
-    const cutoffText = cutoff.toLocaleString('id-ID', {
-      year: 'numeric',
-      month: 'long',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-    throw new Error(`Tanggal event maksimal sampai ${cutoffText}`)
+watch(showCreate, (val) => {
+  if (!val) return
+
+  fetchPolRate()
+
+  const minLocal = minEventDateLocalValue()
+  const minDate = new Date(minLocal)
+
+  const current = newEvent.date_iso ? new Date(newEvent.date_iso) : null
+  if (!current || Number.isNaN(current.getTime()) || current.getTime() < minDate.getTime()) {
+    newEvent.date_iso = minLocal
   }
-}
-
-function toDateTimeLocalValue(d) {
-  const p = n => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
-}
-
-function minEventDateLocalValue() {
-  const now = new Date()
-  const d = new Date(now)
-  d.setSeconds(0, 0)
-  if (d.getTime() < now.getTime()) d.setMinutes(d.getMinutes() + 1)
-  return toDateTimeLocalValue(d)
-}
+})
 
 function toIso(dtLocal) {
   if (!dtLocal) return ''
@@ -351,28 +357,27 @@ async function createEvent() {
     if (!newEvent.title || !newEvent.date_iso || !newEvent.venue) {
       throw new Error('Title/Date/Venue wajib diisi')
     }
-    assertEventDateAllowedFromLocalInput(newEvent.date_iso)
+
+    assertCreateEventDateAllowedFromLocalInput(newEvent.date_iso)
 
     const priceIdr = Number(newEvent.price_idr)
     if (!priceIdr || priceIdr <= 0) {
       throw new Error('Harga tiket (IDR) wajib > 0')
     }
 
-    // Upload gambar event kalau ada → dipakai sekaligus sebagai metadataURI NFT
     if (newImageFile.value && !newEvent.image_url) {
       uploading.value = true
       const url = await uploadImageFile(newImageFile.value)
       newEvent.image_url = url
     }
 
-    // --- upload NFT image (kalau ada) ---
     if (newNftImageFile.value && !newNftImageUrl.value) {
       uploading.value = true
       const url = await uploadImageFile(newNftImageFile.value)
       newNftImageUrl.value = url
     }
-    // prioritas: NFT image → kalau kosong pakai banner → kalau kosong juga, ""
-    const metadataURI = newNftImageUrl.value || newEvent.image_url || ''   // boleh kosong, nanti fallback ke defaultURI kalau kamu set
+
+    const metadataURI = newNftImageUrl.value || newEvent.image_url || ''
 
     if (!TICKETS_CONTRACT) {
       throw new Error('VITE_TICKETS_CONTRACT belum diset di .env')
@@ -384,26 +389,15 @@ async function createEvent() {
     const signer = await provider.getSigner()
     const contract = new ethers.Contract(TICKETS_CONTRACT, ASIQTIX_TICKETS_ABI, signer)
 
-    // 1) Konversi harga IDR → wei (POL) lewat backend
     const priceWei = await convertIdrToWei(priceIdr)
 
-    // 2) Hitung maxSupply
     const maxSupply = BigInt(Math.floor(Number(newEvent.total_tickets) || 0))
     if (maxSupply <= 0n) throw new Error('Total tiket harus > 0')
 
-    // 3) Hitung eventTime (unix timestamp detik) dari tanggal yang diinput
     const eventDate = new Date(newEvent.date_iso)
     if (Number.isNaN(eventDate.getTime())) throw new Error('Tanggal event tidak valid')
     const eventTime = BigInt(Math.floor(eventDate.getTime() / 1000))
 
-    // // 4) Panggil kontrak
-    // await ensureChain('amoy')
-    // const { provider } = await connect()
-    // const signer = await provider.getSigner()
-
-    // const contract = new ethers.Contract(TICKETS_CONTRACT, ASIQTIX_TICKETS_ABI, signer)
-    // const nextId = await contract.nextEventId()
-    // 2. TEST DULU PAKAI callStatic
     try {
       await contract.createEvent.staticCall(
         priceWei,
@@ -422,7 +416,6 @@ async function createEvent() {
         e?.message ||
         'Create event gagal (revert dari smart contract)'
       )
-      // jangan lanjut kirim transaksi kalau callStatic gagal
       return
     }
 
@@ -435,25 +428,22 @@ async function createEvent() {
     const receipt = await tx.wait()
     if (!receipt.status) throw new Error('Transaksi createEvent gagal di blockchain')
 
-    // const chainEventId = Number(nextId.toString())
-    // Ambil eventId dari event EventCreated di log
     let chainEventId = null
     for (const log of receipt.logs) {
       try {
-        const parsed = contract.interface.parseLog(log) // {topics: log.topics, data: log.data}
+        const parsed = contract.interface.parseLog(log)
         if (parsed?.name === 'EventCreated') {
           chainEventId = Number(parsed.args.eventId.toString())
           break
         }
       } catch {
-        // bukan log EventCreated dari kontrak ini
+        //
       }
     }
     if (chainEventId == null) {
       throw new Error('Tidak bisa menemukan eventId dari log EventCreated')
     }
 
-    // 5) Simpan ke backend (Supabase) – chain_event_id nyambung ke eventId on-chain
     const payload = {
       title: newEvent.title,
       date_iso: toIso(newEvent.date_iso),
@@ -471,7 +461,6 @@ async function createEvent() {
       body: JSON.stringify(payload)
     })
 
-    // 6) Reset form & reload list
     Object.assign(newEvent, {
       title: '',
       date_iso: '',
@@ -490,7 +479,6 @@ async function createEvent() {
       newImagePreview.value = ''
     }
 
-    // reset NFT
     newNftImageFile.value = null
     if (newNftImagePreview.value) {
       URL.revokeObjectURL(newNftImagePreview.value)
@@ -506,17 +494,15 @@ async function createEvent() {
     alert(`Create event gagal: ${e?.message || e}`)
   } finally {
     uploading.value = false
-  } // diganti 26-11-2025
+  }
 }
 
 const editId = ref(null)
 
-// Mengganti price_pol menjadi price_idr
 const edit = reactive({
   title: '', date_iso: '', venue: '', description: '',
   image_url: '', price_idr: 0, total_tickets: 0, listed: true
 })
-
 
 function startEdit(ev) {
   editId.value = ev.id
@@ -529,7 +515,7 @@ function startEdit(ev) {
   edit.venue = ev.venue || ''
   edit.description = ev.description || ''
   edit.image_url = ev.image_url || ''
-  edit.price_idr = Number(ev.price_idr || 0)  // diganti 25-11-2025
+  edit.price_idr = Number(ev.price_idr || 0)
   edit.total_tickets = Number(ev.total_tickets || 0)
   edit.listed = !!ev.listed
   showEdit.value = true
@@ -538,14 +524,15 @@ function cancelEdit() { showEdit.value = false; editId.value = null }
 
 async function saveEdit() {
   try {
-    assertEventDateAllowedFromLocalInput(edit.date_iso)
+    assertEditEventDateNotPastFromLocalInput(edit.date_iso)
+
     const payload = {
       title: edit.title,
       date_iso: toIso(edit.date_iso),
       venue: edit.venue,
       description: edit.description,
       image_url: edit.image_url || null,
-      price_idr: Number(edit.price_idr) || 0, // diganti 25-11-2025
+      price_idr: Number(edit.price_idr) || 0,
       total_tickets: Number(edit.total_tickets) || 0,
       listed: !!edit.listed
     }
@@ -568,11 +555,9 @@ async function toggleList(ev) {
   catch (e) { alert(`List/Delist failed: ${e.message}`) }
 }
 
-function imgFor (ev) {
-  // kalau event punya banner hasil upload, pakai itu
+function imgFor(ev) {
   if (ev.image_url && ev.image_url.length > 0) return ev.image_url
 }
-
 </script>
 
 <template>
@@ -630,7 +615,7 @@ function imgFor (ev) {
           <div class="scroll">
             <label>Title <input v-model="newEvent.title" /></label>
             <label>
-              Date (UTC)
+              Date (Local)
               <input
                 type="datetime-local"
                 step="60"
@@ -685,7 +670,6 @@ function imgFor (ev) {
                 </span>
               </div>
             </div>
-            <!-- <label>Price (IDR) <input type="number" min="0" step="1" v-model.number="newEvent.price_idr" /></label> -->
             <label>Total Tickets <input type="number" min="0" step="1" v-model.number="newEvent.total_tickets" /></label>
             <label class="chk"><input type="checkbox" v-model="newEvent.listed" /> Listed</label>
             <label>Description <textarea rows="3" v-model="newEvent.description" /></label>
@@ -706,12 +690,12 @@ function imgFor (ev) {
           <div class="scroll">
             <label>Title <input v-model="edit.title" /></label>
             <label>
-              Date (UTC)
+              Date (Local)
               <input
                 type="datetime-local"
                 step="60"
-                v-model="newEvent.date_iso"
-                :min="minEventDateLocalValue()"
+                v-model="edit.date_iso"
+                :min="minEditDateLocalValue()"
               />
             </label>
             <label>Venue <input v-model="edit.venue" /></label>
@@ -1017,10 +1001,6 @@ function imgFor (ev) {
   z-index: 1;
 }
 
-/* IMPORTANT FIX:
-   - Jangan pakai left:50% + translateX(-50%) untuk title panjang (rawan “kepotong” + susah ellipsis)
-   - Pakai inset kiri-kanan + padding + ellipsis
-*/
 .home-page .img-wrap .title{
   position: absolute;
   left: 16px;
@@ -1036,7 +1016,6 @@ function imgFor (ev) {
   text-transform: uppercase;
   text-shadow: 0 2px 6px rgba(0,0,0,.6);
 
-  /* anti kepotong + aman untuk judul panjang */
   padding: 0 2px;
   box-sizing: border-box;
   white-space: nowrap;

@@ -47,7 +47,7 @@ const PORT = Number(process.env.PORT) || 3001
 const IS_PROD = process.env.NODE_ENV === 'production'
 const IS_TEST = process.env.NODE_ENV === 'test'
 const EVENT_MIN_LEAD_DAYS = Number(process.env.EVENT_MIN_LEAD_DAYS || process.env.EVENT_CREATE_WINDOW_DAYS || 7)
-const APP_TZ_OFFSET_MINUTES = Number(process.env.APP_TZ_OFFSET_MINUTES || 480)
+const APP_TZ_OFFSET_MINUTES = Number(process.env.APP_TZ_OFFSET_MINUTES || 420)
 
 
 const ORIGINS_ENV = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '')
@@ -256,7 +256,7 @@ function getMinAllowedUtcMs(nowMs = Date.now()) {
   return getStartOfTodayUtcMs(nowMs) + EVENT_MIN_LEAD_DAYS * 86_400_000
 }
 
-function validateEventDateIsoOrThrow(dateIso, nowMs = Date.now()) {
+function validateCreateEventDateIsoOrThrow(dateIso, nowMs = Date.now()) {
   const eventMs = Date.parse(dateIso)
   if (Number.isNaN(eventMs)) {
     const err = new Error('invalid_event_date')
@@ -278,6 +278,22 @@ function validateEventDateIsoOrThrow(dateIso, nowMs = Date.now()) {
     throw err
   }
 }
+
+function validateUpdateEventDateIsoOrThrow(dateIso, nowMs = Date.now()) {
+  const eventMs = Date.parse(dateIso)
+  if (Number.isNaN(eventMs)) {
+    const err = new Error('invalid_event_date')
+    err.code = 'invalid_event_date'
+    throw err
+  }
+
+  if (eventMs < nowMs) {
+    const err = new Error('event_date_in_past')
+    err.code = 'event_date_in_past'
+    throw err
+  }
+}
+
 
 const eventCreateSchema = z.object({
   title: z.string().min(1).max(160),
@@ -536,7 +552,7 @@ app.post('/api/events', requireAddress, async (req, res) => {
 
   const p = parsed.data
   try {
-    validateEventDateIsoOrThrow(p.date_iso)
+    validateCreateEventDateIsoOrThrow(p.date_iso)
   } catch (e) {
     return res.status(400).json({
       error: e.code || 'invalid_event_date',
@@ -590,7 +606,7 @@ app.put('/api/events/:id', requireAddress, async (req, res) => {
 
   if (typeof req.body?.date_iso === 'string') {
     try {
-      validateEventDateIsoOrThrow(req.body.date_iso)
+      validateUpdateEventDateIsoOrThrow(req.body.date_iso)
     } catch (e) {
       return res.status(400).json({
         error: e.code || 'invalid_event_date',
@@ -657,14 +673,45 @@ app.delete('/api/events/:id', requireAddress, async (req, res) => {
   res.json({ ok: true })
 })
 
-app.patch('/api/events/:id/list', requireAdmin, async (req, res) => {
+app.patch('/api/events/:id/list', requireAddress, async (req, res) => {
+  const wallet = req.walletAddress
+  const user = await ensureUserRow(wallet)
+
+  if (!['admin', 'promoter'].includes(user.role)) {
+    return res.status(403).json({ error: 'forbidden_role', role: user.role })
+  }
+
   const id = String(req.params.id)
   const { listed } = req.body || {}
   if (typeof listed !== 'boolean') return res.status(400).json({ error: 'listed must be boolean' })
-  const { data, error } = await supabase.from('events').update({ listed: !!listed }).eq('id', id).select().single()
+
+  const { data: ev, error: evErr } = await supabase
+    .from('events')
+    .select('id,promoter_wallet')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (evErr) return res.status(500).json({ error: evErr.message })
+  if (!ev) return res.status(404).json({ error: 'event_not_found' })
+
+  const isAdminUser = user.role === 'admin'
+  const isOwner = String(ev.promoter_wallet || '').toLowerCase() === String(wallet).toLowerCase()
+
+  if (!isAdminUser && !isOwner) {
+    return res.status(403).json({ error: 'bukan_admin_atau_pemilik_event' })
+  }
+
+  const { data, error } = await supabase
+    .from('events')
+    .update({ listed: !!listed, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+
   if (error) return res.status(500).json({ error: error.message })
   res.json(data)
 })
+
 app.get('/api/events/:id', async (req, res) => {
   const id = String(req.params.id)
   const { data: row, error } = await supabase.from('events').select('*').eq('id', id).maybeSingle()
@@ -677,10 +724,27 @@ app.get('/api/events/:id', async (req, res) => {
 })
 app.get('/api/events', async (req, res) => {
   const addr = getReqAddress(req)
-  const admin = await isAdmin(addr)
   const wantAll = req.query.all == '1' || req.query.include_unlisted == '1'
+
+  let admin = false
+  let user = null
+
+  if (addr) {
+    admin = await isAdmin(addr)
+    try { user = await ensureUserRow(addr) } catch { user = null }
+  }
+
   let q = supabase.from('events').select('*').order('date_iso', { ascending: false })
-  if (!(admin && wantAll)) q = q.eq('listed', true)
+
+  if (admin && wantAll) {
+    // admin boleh lihat semua
+  } else if (wantAll && user?.role === 'promoter' && addr) {
+    // promoter boleh lihat listed true dan event miliknya sendiri
+    q = q.or(`listed.eq.true,promoter_wallet.eq.${addr}`)
+  } else {
+    q = q.eq('listed', true)
+  }
+
   const { data, error } = await q
   if (error) return res.status(500).json({ error: error.message })
   res.json({ items: data })
