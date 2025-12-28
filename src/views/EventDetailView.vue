@@ -72,7 +72,7 @@ function openBuyDialog() {
 
   // ❌ kalau event sudah berlangsung / selesai, jangan buka dialog
   if (isEventFinished.value) {
-    buyMsg.value = 'Tiket tidak bisa dibeli karena event sudah berlangsung / selesai.'
+    buyMsg.value = 'Tiket tidak bisa dibeli karena event sudah memasuki hari event / selesai.'
     return
   }
 
@@ -130,7 +130,15 @@ const isEventFinished = computed(() => {
   if (!ev.value?.date_iso) return false
   const dt = new Date(ev.value.date_iso)
   if (Number.isNaN(dt.getTime())) return false
-  return dt.getTime() <= Date.now()
+
+  // Tutup mulai 00:00 tanggal event
+  const closeAt = new Date(
+    dt.getFullYear(),
+    dt.getMonth(),
+    dt.getDate(),
+    0, 0, 0, 0
+  ).getTime()
+  return Date.now() >= closeAt
 })
 
 // siapa saja yang boleh melihat tools promotor di UI
@@ -147,7 +155,7 @@ async function buyTicket(qty = 1) {
 
   // backup guard: kalau entah bagaimana dialog masih bisa kebuka
   if (isEventFinished.value) {
-    buyMsg.value = 'Tiket tidak bisa dibeli karena event sudah berlangsung / selesai.'
+    buyMsg.value = 'Tiket tidak bisa dibeli karena event sudah memasuki hari event / selesai.'
     return
   }
 
@@ -631,7 +639,7 @@ onMounted(async () => {
             >
               <!-- Prioritas 1: tiket habis -->
               <span v-if="isSoldOut">SOLD OUT</span>
-              <!-- Prioritas 2: event sudah berlangsung / selesai -->
+              <!-- Prioritas 2: event sudah hari event / selesai -->
               <span v-else-if="isEventFinished">CLOSED</span>
               <!-- Lainnya -->
               <span v-else-if="buying">PROCESSING…</span>
@@ -643,7 +651,7 @@ onMounted(async () => {
               Tiket untuk event ini sudah habis terjual.
             </p>
             <p v-else-if="isEventFinished" class="buy-msg">
-              Tiket tidak bisa dibeli karena event sudah berlangsung / selesai.
+              Tiket tidak bisa dibeli karena event sudah memasuki hari event / selesai.
             </p>
             <p v-else-if="buyMsg" class="buy-msg">{{ buyMsg }}</p>
 

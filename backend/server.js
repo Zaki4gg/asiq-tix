@@ -1105,10 +1105,17 @@ app.post(['/api/purchase', '/purchase'], requireAddress, async (req, res) => {
     // ❌ Cegah pembelian jika waktu event sudah lewat / sedang berlangsung
     if (ev.date_iso) {
       const eventMs = Date.parse(ev.date_iso)
-      if (!Number.isNaN(eventMs) && eventMs <= Date.now()) {
-        return res.status(400).json({
-          error: 'Tiket tidak bisa dibeli karena event sudah berlangsung / selesai.'
-        })
+      if (!Number.isNaN(eventMs)) {
+        // 00:00 di tanggal event (hari H) dalam timezone APP_TZ_OFFSET_MINUTES
+        const eventDayStartMs = getStartOfTodayUtcMs(eventMs)
+        const nowMs = Date.now()
+
+        if (nowMs >= eventDayStartMs) {
+          // Hari H sudah masuk → tidak boleh beli tiket lagi
+          return res.status(400).json({
+            error: 'Tiket tidak bisa dibeli karena event sudah memasuki hari event / selesai.'
+          })
+        }
       }
     }
 
