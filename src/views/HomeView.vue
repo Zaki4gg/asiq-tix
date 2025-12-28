@@ -684,7 +684,6 @@ function editImgPreview() {
               <button class="adm-btn" @click="startEdit(ev)" title="Edit">✎</button>
 
               <button
-                v-if="isAdmin"
                 class="adm-btn"
                 @click="toggleList(ev)"
                 :title="ev.listed ? 'Delist' : 'List'"
