@@ -70,6 +70,12 @@ function openBuyDialog() {
   // guard tambahan (walaupun tombol sudah disabled)
   if (buying.value) return
 
+  // ❌ kalau event sudah berlangsung / selesai, jangan buka dialog
+  if (isEventFinished.value) {
+    buyMsg.value = 'Tiket tidak bisa dibeli karena event sudah berlangsung / selesai.'
+    return
+  }
+
   const total = Number(ev.value?.total_tickets ?? 0)
   const sold = Number(ev.value?.sold_tickets ?? 0)
   const remaining = total > 0 ? Math.max(0, total - sold) : 1
@@ -138,6 +144,12 @@ const canWithdrawPromoter = computed(() =>
 
 async function buyTicket(qty = 1) {
   if (!ev.value) return
+
+  // backup guard: kalau entah bagaimana dialog masih bisa kebuka
+  if (isEventFinished.value) {
+    buyMsg.value = 'Tiket tidak bisa dibeli karena event sudah berlangsung / selesai.'
+    return
+  }
 
   if (!wallet()) {
     buyMsg.value = 'Wallet belum terhubung.'
@@ -617,12 +629,23 @@ onMounted(async () => {
               :disabled="isSoldOut || buying"
               @click="openBuyDialog"
             >
+              <!-- Prioritas 1: tiket habis -->
               <span v-if="isSoldOut">SOLD OUT</span>
+              <!-- Prioritas 2: event sudah berlangsung / selesai -->
+              <span v-else-if="isEventFinished">CLOSED</span>
+              <!-- Lainnya -->
               <span v-else-if="buying">PROCESSING…</span>
               <span v-else>BUY TICKET</span>
             </button>
 
-            <p v-if="buyMsg" class="buy-msg">{{ buyMsg }}</p>
+            <!-- Pesan di bawah tombol -->
+            <p v-if="isSoldOut" class="buy-msg">
+              Tiket untuk event ini sudah habis terjual.
+            </p>
+            <p v-else-if="isEventFinished" class="buy-msg">
+              Tiket tidak bisa dibeli karena event sudah berlangsung / selesai.
+            </p>
+            <p v-else-if="buyMsg" class="buy-msg">{{ buyMsg }}</p>
 
             <!-- PROMOTER TOOLS -->
             <div

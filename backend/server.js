@@ -1048,6 +1048,16 @@ app.post(['/api/purchase', '/purchase'], requireAddress, async (req, res) => {
     }
     ev = evData
 
+    // ❌ Cegah pembelian jika waktu event sudah lewat / sedang berlangsung
+    if (ev.date_iso) {
+      const eventMs = Date.parse(ev.date_iso)
+      if (!Number.isNaN(eventMs) && eventMs <= Date.now()) {
+        return res.status(400).json({
+          error: 'Tiket tidak bisa dibeli karena event sudah berlangsung / selesai.'
+        })
+      }
+    }
+
     const sold = Number(ev.sold_tickets ?? 0)
     const total = Number(ev.total_tickets ?? 0)
     const remaining = total - sold
