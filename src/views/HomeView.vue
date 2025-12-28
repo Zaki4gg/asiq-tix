@@ -63,6 +63,16 @@ async function uploadImageFile(file) {
   return data.url
 }
 
+// Upload metadata JSON (NFT metadata) ke Supabase, balikin URL .json
+async function uploadJsonMetadata(metaObj) {
+  const jsonStr = JSON.stringify(metaObj)
+  const blob = new Blob([jsonStr], { type: 'application/json' })
+  const file = new File([blob], 'metadata.json', { type: 'application/json' })
+
+  // Reuse /api/upload yang sudah ada
+  return await uploadImageFile(file)
+}
+
 /* =========================
    PRICE: POL IDR
    ========================= */
@@ -378,10 +388,35 @@ async function createEvent() {
       newNftImageUrl.value = url
     }
 
-    const metadataURI = newNftImageUrl.value || newEvent.image_url || ''
+    // Tentukan gambar utama untuk NFT:
+    // 1) gambar NFT khusus, kalau ada
+    // 2) kalau tidak ada, pakai banner event
+    const nftImage = newNftImageUrl.value || newEvent.image_url || ''
+    // Bangun metadata JSON & upload, supaya MetaMask bisa baca field "image"
+    let metadataURI = ''
+    if (nftImage) {
+      const nftMetadata = {
+        name: newEvent.title || 'AsiqTiX Ticket',
+        description:
+          newEvent.description ||
+          `Ticket for ${newEvent.title || 'AsiqTiX Event'}`,
+        image: nftImage,
+        external_url: window.location.origin,
+        attributes: [
+          { trait_type: 'Platform', value: 'AsiqTiX' },
+          { trait_type: 'Venue', value: newEvent.venue || '' },
+          { trait_type: 'Date', value: newEvent.date_iso || '' }
+        ]
+      }
+
+      uploading.value = true
+      metadataURI = await uploadJsonMetadata(nftMetadata)
+    } else {
+      // Kalau benar-benar tidak ada gambar, tetap kirim string kosong (behaviour lama)
+      metadataURI = ''
+    }
 
     if (!TICKETS_CONTRACT) throw new Error('VITE_TICKETS_CONTRACT belum diset di .env')
-
     await ensureChain('amoy')
 
     const provider = new ethers.BrowserProvider(window.ethereum)
