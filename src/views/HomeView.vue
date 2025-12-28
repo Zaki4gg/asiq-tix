@@ -27,23 +27,12 @@ function withWalletParam(url) {
   return url + (url.includes('?') ? '&' : '?') + 'wallet=' + encodeURIComponent(w)
 }
 
-async function convertIdrToWei(amountIdr) {
-  const res = await api('/api/price/idr-to-wei', {
-    method: 'POST',
-    body: JSON.stringify({ amount_idr: amountIdr })
-  })
-  if (!res || !res.price_wei) throw new Error('Gagal konversi')
-  if (res.idr_per_pol) {
-    polRateIdr.value = Number(res.idr_per_pol)
-  }
-  return BigInt(res.price_wei)
-}
-
 async function api(path, options = {}) {
   const full = path.startsWith('/api') ? path : `/api${path.startsWith('/') ? path : `/${path}`}`
   const method = String(options?.method || 'GET').toUpperCase()
   let url = `${API_HOST}${full}`
   if (method === 'GET') url = withWalletParam(url)
+
   const res = await fetch(url, {
     ...options,
     headers: {
@@ -52,6 +41,7 @@ async function api(path, options = {}) {
       'x-wallet-address': getWallet()
     }
   })
+
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`)
   return data
@@ -60,27 +50,67 @@ async function api(path, options = {}) {
 async function uploadImageFile(file) {
   const fd = new FormData()
   fd.append('file', file)
+
   const res = await fetch(`${API_HOST}/api/upload`, {
     method: 'POST',
     headers: { 'x-wallet-address': getWallet() },
     body: fd
   })
+
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data?.error || data?.message || `HTTP ${res.status}`)
   if (!data?.url || !/^https?:\/\//i.test(data.url)) throw new Error('Upload gagal: URL tidak valid')
   return data.url
 }
 
+/* =========================
+   PRICE: POL IDR
+   ========================= */
+const polRateIdr = ref(null)
+const polRateLoading = ref(false)
+const polRateError = ref('')
+
+async function fetchPolRate() {
+  try {
+    polRateLoading.value = true
+    polRateError.value = ''
+    const res = await api('/api/price/pol')
+    const price = Number(res?.price_idr || 0)
+    if (!price) throw new Error('Harga tidak valid')
+    polRateIdr.value = price
+  } catch (err) {
+    console.error(err)
+    polRateError.value = 'Gagal mengambil harga POL/IDR'
+  } finally {
+    polRateLoading.value = false
+  }
+}
+
+async function convertIdrToWei(amountIdr) {
+  const res = await api('/api/price/idr-to-wei', {
+    method: 'POST',
+    body: JSON.stringify({ amount_idr: amountIdr })
+  })
+  if (!res || !res.price_wei) throw new Error('Gagal konversi')
+  if (res.idr_per_pol) polRateIdr.value = Number(res.idr_per_pol)
+  return BigInt(res.price_wei)
+}
+
+/* =========================
+   ROLE
+   ========================= */
 const role = ref('customer')
 const isAdmin = computed(() => role.value === 'admin')
 const isPromoter = computed(() => role.value === 'promoter')
+
 const heroTitle = computed(() =>
   (isAdmin.value || isPromoter.value)
     ? 'CREATE A NEW EVENT'
     : 'UPCOMING CONCERT'
 )
 
-const walletAddress = computed(() => (getWallet() || ''). toLowerCase())
+const walletAddress = computed(() => (getWallet() || '').toLowerCase())
+
 function canManageEvent(ev) {
   if (isAdmin.value) return true
   if (isPromoter.value) {
@@ -114,6 +144,9 @@ async function loadRole() {
   }
 }
 
+/* =========================
+   EVENTS LIST
+   ========================= */
 const loading = ref(false)
 const errorMsg = ref('')
 const events = ref([])
@@ -137,15 +170,21 @@ function onAccountsChanged(accs) {
   loadRole()
   loadEvents()
 }
+
 onMounted(async () => {
   await hydrateAccount()
   if (window?.ethereum?.on) window.ethereum.on('accountsChanged', onAccountsChanged)
   await loadRole()
   await loadEvents()
 })
+
 onBeforeUnmount(() => {
   if (window?.ethereum?.removeListener) window.ethereum.removeListener('accountsChanged', onAccountsChanged)
+  if (newImagePreview.value) URL.revokeObjectURL(newImagePreview.value)
+  if (newNftImagePreview.value) URL.revokeObjectURL(newNftImagePreview.value)
+  if (editImagePreview.value) URL.revokeObjectURL(editImagePreview.value)
 })
+
 watch(account, async () => {
   await loadRole()
   await loadEvents()
@@ -164,6 +203,61 @@ function buyTicket(ev) {
   r.push({ name: 'event', params: { id: ev.id } })
 }
 
+/* =========================
+   DATE HELPERS
+   ========================= */
+const EVENT_MIN_LEAD_DAYS = 7
+
+function startOfTodayLocal(now = new Date()) {
+  const d = new Date(now)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function minAllowedEventDateLocal(now = new Date()) {
+  const d = startOfTodayLocal(now)
+  d.setDate(d.getDate() + EVENT_MIN_LEAD_DAYS)
+  return d
+}
+
+function toDateTimeLocalValue(d) {
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+function minEventDateLocalValue() {
+  return toDateTimeLocalValue(minAllowedEventDateLocal(new Date()))
+}
+
+function assertEventDateAllowedFromLocalInput(dtLocal) {
+  if (!dtLocal) throw new Error('Tanggal wajib diisi')
+
+  const eventDate = new Date(dtLocal)
+  if (Number.isNaN(eventDate.getTime())) throw new Error('Tanggal tidak valid')
+
+  const minDate = minAllowedEventDateLocal(new Date())
+  if (eventDate.getTime() < minDate.getTime()) {
+    const minText = minDate.toLocaleString('id-ID', {
+      year: 'numeric',
+      month: 'long',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+    throw new Error(`Tanggal event minimal ${minText}`)
+  }
+}
+
+function toIso(dtLocal) {
+  if (!dtLocal) return ''
+  const d = new Date(dtLocal)
+  if (Number.isNaN(d.getTime())) throw new Error('Tanggal tidak valid')
+  return d.toISOString()
+}
+
+/* =========================
+   CREATE EVENT
+   ========================= */
 const showCreate = ref(false)
 const showEdit = ref(false)
 
@@ -177,6 +271,7 @@ const newEvent = reactive({
   total_tickets: 0,
   listed: true
 })
+
 const newImageFile = ref(null)
 const newImagePreview = ref('')
 const uploading = ref(false)
@@ -186,9 +281,6 @@ const newNftImagePreview = ref('')
 const newNftImageUrl = ref('')
 
 const priceIdrDisplay = ref('')
-const polRateIdr = ref(null)
-const polRateLoading = ref(false)
-const polRateError = ref('')
 
 function formatIdr(num) {
   if (!num) return ''
@@ -213,9 +305,7 @@ function onPriceIdrInput(e) {
 
 watch(
   () => newEvent.price_idr,
-  (val) => {
-    priceIdrDisplay.value = val ? formatIdr(val) : ''
-  }
+  (val) => { priceIdrDisplay.value = val ? formatIdr(val) : '' }
 )
 
 function onNewImageChange(e) {
@@ -229,35 +319,15 @@ function onNftImageChange(e) {
   const file = e.target.files?.[0]
   if (!file) {
     newNftImageFile.value = null
-    if (newNftImagePreview.value) {
-      URL.revokeObjectURL(newNftImagePreview.value)
-    }
+    if (newNftImagePreview.value) URL.revokeObjectURL(newNftImagePreview.value)
     newNftImagePreview.value = ''
     newNftImageUrl.value = ''
     return
   }
 
   newNftImageFile.value = file
-  if (newNftImagePreview.value) {
-    URL.revokeObjectURL(newNftImagePreview.value)
-  }
+  if (newNftImagePreview.value) URL.revokeObjectURL(newNftImagePreview.value)
   newNftImagePreview.value = URL.createObjectURL(file)
-}
-
-async function fetchPolRate() {
-  try {
-    polRateLoading.value = true
-    polRateError.value = ''
-    const res = await api('/api/price/pol')
-    const price = Number(res?.price_idr || 0)
-    if (!price) throw new Error('Harga tidak valid')
-    polRateIdr.value = price
-  } catch (err) {
-    console.error(err)
-    polRateError.value = 'Gagal mengambil harga POL/IDR'
-  } finally {
-    polRateLoading.value = false
-  }
 }
 
 const priceInPol = computed(() => {
@@ -269,68 +339,6 @@ const priceInPol = computed(() => {
   return pol
 })
 
-function toDateTimeLocalValue(d) {
-  const p = n => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
-}
-
-const EVENT_CREATE_MIN_DAYS = 7
-
-function startOfTodayLocal(now = new Date()) {
-  const d = new Date(now)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-function minAllowedCreateEventDateLocal(now = new Date()) {
-  const d = startOfTodayLocal(now)
-  d.setDate(d.getDate() + EVENT_CREATE_MIN_DAYS)
-  return d
-}
-
-function minEventDateLocalValue() {
-  return toDateTimeLocalValue(minAllowedCreateEventDateLocal(new Date()))
-}
-
-function minEditDateLocalValue() {
-  const now = new Date()
-  const d = new Date(now)
-  d.setSeconds(0, 0)
-  if (d.getTime() < now.getTime()) d.setMinutes(d.getMinutes() + 1)
-  return toDateTimeLocalValue(d)
-}
-
-function assertCreateEventDateAllowedFromLocalInput(dtLocal) {
-  if (!dtLocal) throw new Error('Tanggal wajib diisi')
-
-  const eventDate = new Date(dtLocal)
-  if (Number.isNaN(eventDate.getTime())) throw new Error('Tanggal tidak valid')
-
-  const minDate = minAllowedCreateEventDateLocal(new Date())
-  if (eventDate.getTime() < minDate.getTime()) {
-    const minText = minDate.toLocaleString('id-ID', {
-      year: 'numeric',
-      month: 'long',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-    throw new Error(`Tanggal event minimal ${minText}`)
-  }
-}
-
-function assertEditEventDateNotPastFromLocalInput(dtLocal) {
-  if (!dtLocal) throw new Error('Tanggal wajib diisi')
-
-  const eventDate = new Date(dtLocal)
-  if (Number.isNaN(eventDate.getTime())) throw new Error('Tanggal tidak valid')
-
-  const now = new Date()
-  if (eventDate.getTime() < now.getTime()) {
-    throw new Error('Tanggal event tidak boleh di masa lalu')
-  }
-}
-
 watch(showCreate, (val) => {
   if (!val) return
 
@@ -338,27 +346,20 @@ watch(showCreate, (val) => {
 
   const minLocal = minEventDateLocalValue()
   const minDate = new Date(minLocal)
-
   const current = newEvent.date_iso ? new Date(newEvent.date_iso) : null
+
   if (!current || Number.isNaN(current.getTime()) || current.getTime() < minDate.getTime()) {
     newEvent.date_iso = minLocal
   }
 })
 
-function toIso(dtLocal) {
-  if (!dtLocal) return ''
-  const d = new Date(dtLocal)
-  if (Number.isNaN(d.getTime())) throw new Error('Tanggal tidak valid')
-  return d.toISOString()
-}
-
 async function createEvent() {
   try {
     if (!newEvent.title || !newEvent.date_iso || !newEvent.venue) {
-      throw new Error('Title/Date/Venue wajib diisi')
+      throw new Error('Title, Date, Venue wajib diisi')
     }
 
-    assertCreateEventDateAllowedFromLocalInput(newEvent.date_iso)
+    assertEventDateAllowedFromLocalInput(newEvent.date_iso)
 
     const priceIdr = Number(newEvent.price_idr)
     if (!priceIdr || priceIdr <= 0) {
@@ -379,9 +380,7 @@ async function createEvent() {
 
     const metadataURI = newNftImageUrl.value || newEvent.image_url || ''
 
-    if (!TICKETS_CONTRACT) {
-      throw new Error('VITE_TICKETS_CONTRACT belum diset di .env')
-    }
+    if (!TICKETS_CONTRACT) throw new Error('VITE_TICKETS_CONTRACT belum diset di .env')
 
     await ensureChain('amoy')
 
@@ -399,17 +398,9 @@ async function createEvent() {
     const eventTime = BigInt(Math.floor(eventDate.getTime() / 1000))
 
     try {
-      await contract.createEvent.staticCall(
-        priceWei,
-        maxSupply,
-        eventTime,
-        metadataURI
-      )
+      await contract.createEvent.staticCall(priceWei, maxSupply, eventTime, metadataURI)
     } catch (e) {
       console.error('callStatic createEvent REVERT:', e)
-      console.error('reason:', e.reason)
-      console.error('raw error:', e.error ?? e.data ?? e.info)
-
       alert(
         e?.reason ||
         e?.error?.message ||
@@ -419,12 +410,7 @@ async function createEvent() {
       return
     }
 
-    const tx = await contract.createEvent(
-      priceWei,
-      maxSupply,
-      eventTime,
-      metadataURI
-    )
+    const tx = await contract.createEvent(priceWei, maxSupply, eventTime, metadataURI)
     const receipt = await tx.wait()
     if (!receipt.status) throw new Error('Transaksi createEvent gagal di blockchain')
 
@@ -440,9 +426,7 @@ async function createEvent() {
         //
       }
     }
-    if (chainEventId == null) {
-      throw new Error('Tidak bisa menemukan eventId dari log EventCreated')
-    }
+    if (chainEventId == null) throw new Error('Tidak bisa menemukan eventId dari log EventCreated')
 
     const payload = {
       title: newEvent.title,
@@ -474,21 +458,17 @@ async function createEvent() {
     priceIdrDisplay.value = ''
 
     newImageFile.value = null
-    if (newImagePreview.value) {
-      URL.revokeObjectURL(newImagePreview.value)
-      newImagePreview.value = ''
-    }
+    if (newImagePreview.value) URL.revokeObjectURL(newImagePreview.value)
+    newImagePreview.value = ''
 
     newNftImageFile.value = null
-    if (newNftImagePreview.value) {
-      URL.revokeObjectURL(newNftImagePreview.value)
-    }
+    if (newNftImagePreview.value) URL.revokeObjectURL(newNftImagePreview.value)
     newNftImagePreview.value = ''
     newNftImageUrl.value = ''
 
     showCreate.value = false
     await loadEvents()
-    alert(`Event berhasil dibuat. ID on-chain: ${chainEventId}`)
+    alert(`Event berhasil dibuat. ID on chain: ${chainEventId}`)
   } catch (e) {
     console.error(e)
     alert(`Create event gagal: ${e?.message || e}`)
@@ -497,66 +477,143 @@ async function createEvent() {
   }
 }
 
+/* =========================
+   EDIT EVENT
+   ========================= */
 const editId = ref(null)
 
 const edit = reactive({
-  title: '', date_iso: '', venue: '', description: '',
-  image_url: '', price_idr: 0, total_tickets: 0, listed: true
+  title: '',
+  date_iso: '',
+  venue: '',
+  description: '',
+  image_url: '',
+  price_idr: 0,
+  total_tickets: 0,
+  listed: true
 })
+
+const editImageFile = ref(null)
+const editImagePreview = ref('')
+
+function onEditImageChange(e) {
+  const f = e?.target?.files?.[0]
+  editImageFile.value = f || null
+  if (editImagePreview.value) URL.revokeObjectURL(editImagePreview.value)
+  editImagePreview.value = f ? URL.createObjectURL(f) : ''
+}
 
 function startEdit(ev) {
   editId.value = ev.id
   edit.title = ev.title || ''
+
   try {
     const d = new Date(ev.date_iso)
     const p = n => String(n).padStart(2, '0')
     edit.date_iso = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
-  } catch { edit.date_iso = '' }
+  } catch {
+    edit.date_iso = ''
+  }
+
   edit.venue = ev.venue || ''
   edit.description = ev.description || ''
   edit.image_url = ev.image_url || ''
   edit.price_idr = Number(ev.price_idr || 0)
   edit.total_tickets = Number(ev.total_tickets || 0)
   edit.listed = !!ev.listed
+
+  editImageFile.value = null
+  if (editImagePreview.value) URL.revokeObjectURL(editImagePreview.value)
+  editImagePreview.value = ''
+
   showEdit.value = true
 }
-function cancelEdit() { showEdit.value = false; editId.value = null }
+
+function cancelEdit() {
+  showEdit.value = false
+  editId.value = null
+  editImageFile.value = null
+  if (editImagePreview.value) URL.revokeObjectURL(editImagePreview.value)
+  editImagePreview.value = ''
+}
 
 async function saveEdit() {
   try {
-    assertEditEventDateNotPastFromLocalInput(edit.date_iso)
+    assertEventDateAllowedFromLocalInput(edit.date_iso)
+
+    let newUploadedUrl = null
+    if (editImageFile.value) {
+      uploading.value = true
+      newUploadedUrl = await uploadImageFile(editImageFile.value)
+    }
 
     const payload = {
       title: edit.title,
       date_iso: toIso(edit.date_iso),
       venue: edit.venue,
       description: edit.description,
-      image_url: edit.image_url || null,
-      price_idr: Number(edit.price_idr) || 0,
       total_tickets: Number(edit.total_tickets) || 0,
       listed: !!edit.listed
     }
-    await api(`/api/events/${editId.value}`, { method: 'PUT', body: JSON.stringify(payload) })
+
+    if (newUploadedUrl) {
+      payload.image_url = newUploadedUrl
+      edit.image_url = newUploadedUrl
+    }
+
+    await api(`/api/events/${editId.value}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    })
+
     showEdit.value = false
     editId.value = null
+    editImageFile.value = null
+    if (editImagePreview.value) URL.revokeObjectURL(editImagePreview.value)
+    editImagePreview.value = ''
+
     await loadEvents()
     alert('Event updated.')
-  } catch (e) { alert(`Update failed: ${e.message}`) }
+  } catch (e) {
+    alert(`Update failed: ${e.message}`)
+  } finally {
+    uploading.value = false
+  }
 }
 
+/* =========================
+   DELETE and LIST
+   ========================= */
 async function removeEvent(id) {
   if (!confirm('Delete this event?')) return
-  try { await api(`/api/events/${id}`, { method: 'DELETE' }); await loadEvents(); alert('Deleted.') }
-  catch (e) { alert(`Delete failed: ${e.message}`) }
+  try {
+    await api(`/api/events/${id}`, { method: 'DELETE' })
+    await loadEvents()
+    alert('Deleted.')
+  } catch (e) {
+    alert(`Delete failed: ${e.message}`)
+  }
 }
 
 async function toggleList(ev) {
-  try { await api(`/api/events/${ev.id}/list`, { method: 'PATCH', body: JSON.stringify({ listed: !ev.listed }) }); await loadEvents() }
-  catch (e) { alert(`List/Delist failed: ${e.message}`) }
+  try {
+    await api(`/api/events/${ev.id}/list`, {
+      method: 'PATCH',
+      body: JSON.stringify({ listed: !ev.listed })
+    })
+    await loadEvents()
+  } catch (e) {
+    alert(`List or Delist failed: ${e.message}`)
+  }
 }
 
 function imgFor(ev) {
   if (ev.image_url && ev.image_url.length > 0) return ev.image_url
+  return '/Background.png'
+}
+
+function editImgPreview() {
+  return editImagePreview.value || edit.image_url || '/Background.png'
 }
 </script>
 
@@ -568,7 +625,7 @@ function imgFor(ev) {
         <input class="search-input" v-model="searchQuery" type="search" placeholder="Search concerts, venues…" />
         <button class="search-btn" type="submit">🔍</button>
       </form>
-      <button class="hamburger" @click.stop="toggleSidebar" aria-label="Toggle Sidebar"><span/><span/><span/></button>
+      <button class="hamburger" @click.stop="toggleSidebar" aria-label="Toggle Sidebar"><span /><span /><span /></button>
     </header>
 
     <SideNavSB v-model="sidebarOpen" />
@@ -587,33 +644,53 @@ function imgFor(ev) {
             <div class="img" :style="{ backgroundImage: `url(${imgFor(ev)})` }"></div>
             <div class="img-overlay"></div>
             <div class="title">{{ ev.title }}</div>
+
             <div v-if="canManageEvent(ev)" class="adm-tools">
               <button class="adm-btn" @click="startEdit(ev)" title="Edit">✎</button>
-              <button class="adm-btn" @click="toggleList(ev)" :title="ev.listed ? 'Delist' : 'List'">
+
+              <button
+                v-if="isAdmin"
+                class="adm-btn"
+                @click="toggleList(ev)"
+                :title="ev.listed ? 'Delist' : 'List'"
+              >
                 {{ ev.listed ? '⛔' : '✅' }}
               </button>
+
               <button class="adm-btn danger" @click="removeEvent(ev.id)" title="Delete">🗑</button>
             </div>
           </div>
+
           <div class="meta">
             <div><span class="k">Location:</span> <span class="v">{{ ev.venue }}</span></div>
             <div><span class="k">Date:</span> <span class="v">{{ new Date(ev.date_iso).toLocaleString('id-ID') }}</span></div>
           </div>
+
           <p class="desc">{{ ev.description || '(Blank Text)' }}</p>
           <button class="buy" @click="buyTicket(ev)">BUY TICKET</button>
         </article>
       </section>
     </main>
 
-    <button v-if="isAdmin || isPromoter" class="fab" title="Add event" aria-label="Create new event" @click="showCreate = true">＋<span class="sr-only">Create new event</span></button>
+    <button
+      v-if="isAdmin || isPromoter"
+      class="fab"
+      title="Add event"
+      aria-label="Create new event"
+      @click="showCreate = true"
+    >
+      ＋<span class="sr-only">Create new event</span>
+    </button>
 
-    <div v-if="showCreate" class="modal" @click.self="showCreate=false">
+    <div v-if="showCreate" class="modal" @click.self="showCreate = false">
       <div class="modal-card">
-        <button class="modal-x" aria-label="Close" @click="showCreate=false">×</button>
+        <button class="modal-x" aria-label="Close" @click="showCreate = false">×</button>
         <h3>Create Event</h3>
+
         <form class="form" @submit.prevent="createEvent">
           <div class="scroll">
             <label>Title <input v-model="newEvent.title" /></label>
+
             <label>
               Date (Local)
               <input
@@ -623,21 +700,24 @@ function imgFor(ev) {
                 :min="minEventDateLocalValue()"
               />
             </label>
+
             <label>Venue <input v-model="newEvent.venue" /></label>
+
             <label class="file"><span>Image</span><input type="file" accept="image/*" @change="onNewImageChange" /></label>
             <div v-if="newImagePreview || newEvent.image_url" class="img-preview" :style="{ backgroundImage: `url(${newImagePreview || newEvent.image_url})` }"></div>
+
             <label class="block text-sm font-medium mb-1">NFT Image (optional)</label>
             <input type="file" accept="image/*" @change="onNftImageChange" />
             <p class="mt-1 text-xs text-gray-400">Jika tidak diisi, NFT akan memakai gambar banner event.</p>
-            <div v-if="newNftImagePreview" class="mt-2"><span class="text-xs text-gray-300">Preview NFT:</span><img :src="newNftImagePreview" alt="NFT preview" class="mt-1 h-24 rounded object-cover"/></div>
+            <div v-if="newNftImagePreview" class="mt-2">
+              <span class="text-xs text-gray-300">Preview NFT:</span>
+              <img :src="newNftImagePreview" alt="NFT preview" class="mt-1 h-24 rounded object-cover" />
+            </div>
+
             <div class="mb-4">
               <label class="block text-sm font-medium mb-1">Price (IDR)</label>
               <div class="relative">
-                <span
-                  class="absolute inset-y-0 left-0 flex items-center pl-3 text-sm text-gray-400"
-                >
-                  Rp
-                </span>
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-sm text-gray-400">Rp</span>
                 <input
                   type="text"
                   :value="priceIdrDisplay"
@@ -647,19 +727,18 @@ function imgFor(ev) {
                   placeholder="contoh: 150.000"
                 />
               </div>
+
               <div class="mt-1 text-xs text-gray-300 flex items-center gap-2">
                 <span v-if="polRateLoading">Mengambil harga POL/IDR...</span>
+
                 <span v-else-if="polRateError">
                   {{ polRateError }}
-                  <button type="button" class="underline ml-1" @click="fetchPolRate">
-                    coba lagi
-                  </button>
+                  <button type="button" class="underline ml-1" @click="fetchPolRate">coba lagi</button>
                 </span>
+
                 <span v-else-if="priceInPol !== null">
                   ≈ {{ priceInPol.toFixed(4) }} POL
-                  <span class="opacity-70 ml-1">
-                    (1 POL ≈ {{ polRateIdr?.toLocaleString('id-ID') }} IDR)
-                  </span>
+                  <span class="opacity-70 ml-1">(1 POL ≈ {{ polRateIdr?.toLocaleString('id-ID') }} IDR)</span>
                   <button
                     type="button"
                     class="text-[10px] px-2 py-1 border rounded ml-2 opacity-70 hover:opacity-100"
@@ -670,12 +749,14 @@ function imgFor(ev) {
                 </span>
               </div>
             </div>
+
             <label>Total Tickets <input type="number" min="0" step="1" v-model.number="newEvent.total_tickets" /></label>
             <label class="chk"><input type="checkbox" v-model="newEvent.listed" /> Listed</label>
             <label>Description <textarea rows="3" v-model="newEvent.description" /></label>
           </div>
+
           <div class="actions-bar">
-            <button type="button" class="btn ghost" @click="showCreate=false">Cancel</button>
+            <button type="button" class="btn ghost" @click="showCreate = false">Cancel</button>
             <button type="submit" class="btn primary" :disabled="uploading">{{ uploading ? 'Uploading…' : 'Create' }}</button>
           </div>
         </form>
@@ -686,28 +767,50 @@ function imgFor(ev) {
       <div class="modal-card">
         <button class="modal-x" aria-label="Close" @click="cancelEdit()">×</button>
         <h3>Edit Event</h3>
+
         <form class="form" @submit.prevent="saveEdit">
           <div class="scroll">
             <label>Title <input v-model="edit.title" /></label>
+
             <label>
               Date (Local)
               <input
                 type="datetime-local"
                 step="60"
                 v-model="edit.date_iso"
-                :min="minEditDateLocalValue()"
+                :min="minEventDateLocalValue()"
               />
             </label>
+
             <label>Venue <input v-model="edit.venue" /></label>
-            <label>Image URL <input v-model="edit.image_url" placeholder="https://..." /></label>
-            <label>Price (IDR) <input type="number" min="0" step="1" v-model.number="edit.price_idr" /></label>
+
+            <label class="file">
+              <span>Image (optional)</span>
+              <input type="file" accept="image/*" @change="onEditImageChange" />
+            </label>
+            <div class="img-preview" :style="{ backgroundImage: `url(${editImgPreview()})` }"></div>
+            <p class="mt-1 text-xs text-gray-500">
+              Jika tidak upload gambar baru, image event tidak akan berubah.
+            </p>
+
+            <label>
+              Price (IDR)
+              <input
+                type="text"
+                :value="Number(edit.price_idr || 0).toLocaleString('id-ID')"
+                readonly
+                disabled
+              />
+            </label>
+
             <label>Total Tickets <input type="number" min="0" step="1" v-model.number="edit.total_tickets" /></label>
             <label class="chk"><input type="checkbox" v-model="edit.listed" /> Listed</label>
             <label>Description <textarea rows="3" v-model="edit.description" /></label>
           </div>
+
           <div class="actions-bar">
             <button type="button" class="btn ghost" @click="cancelEdit()">Cancel</button>
-            <button type="submit" class="btn primary">Save</button>
+            <button type="submit" class="btn primary" :disabled="uploading">{{ uploading ? 'Uploading…' : 'Save' }}</button>
           </div>
         </form>
       </div>
@@ -716,9 +819,6 @@ function imgFor(ev) {
 </template>
 
 <style scoped>
-/* =========================
-   Home Page (scoped, single source of truth)
-   ========================= */
 .home-page{
   --bg: #0b0d12;
   --panel: #0f131b;
@@ -740,9 +840,6 @@ function imgFor(ev) {
   outline: none;
 }
 
-/* =========================
-   TOP BAR
-   ========================= */
 .home-page .topbar{
   position: sticky;
   top: 0;
@@ -775,7 +872,6 @@ function imgFor(ev) {
   filter: drop-shadow(0 2px 8px rgba(0,0,0,.5));
 }
 
-/* Search (center, desktop) */
 .home-page .search{
   display: grid;
   grid-template-columns: 1fr auto;
@@ -813,7 +909,6 @@ function imgFor(ev) {
   color: #111;
 }
 
-/* Hamburger */
 .home-page .hamburger{
   grid-area: ham;
   justify-self: end;
@@ -838,9 +933,6 @@ function imgFor(ev) {
   opacity: .9;
 }
 
-/* =========================
-   SIDEBAR (card)
-   ========================= */
 .home-page .sb-card{
   position: fixed;
   top: calc(var(--topbar-h) + 10px);
@@ -879,9 +971,6 @@ function imgFor(ev) {
 .home-page .sb-enter-from, .home-page .sb-leave-to { opacity: 0; transform: translateX(12px); }
 .home-page .sb-enter-active, .home-page .sb-leave-active { transition: all .18s ease; }
 
-/* =========================
-   HERO
-   ========================= */
 .home-page .hero{
   position: relative;
   min-height: calc(100vh - var(--topbar-h));
@@ -918,9 +1007,6 @@ function imgFor(ev) {
   padding: 16px;
 }
 
-/* =========================
-   CONTENT
-   ========================= */
 .home-page .container{
   max-width: 1200px;
   margin: clamp(-140px, -10vw, -96px) auto 40px;
@@ -936,9 +1022,6 @@ function imgFor(ev) {
 }
 .home-page .alert.error{ background: #3d1a1a; border-color:#5c2a2a; }
 
-/* =========================
-   CARDS
-   ========================= */
 .home-page .cards{
   display:grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -1054,9 +1137,6 @@ function imgFor(ev) {
 }
 .home-page .buy:hover{ filter: brightness(.96); }
 
-/* =========================
-   ADMIN TOOLS
-   ========================= */
 .home-page .adm-tools{
   position: absolute;
   right: 10px;
@@ -1079,9 +1159,6 @@ function imgFor(ev) {
   border-color: rgba(255,255,255,.18);
 }
 
-/* =========================
-   FAB
-   ========================= */
 .home-page .fab{
   position: fixed;
   right: max(20px, env(safe-area-inset-right));
@@ -1115,9 +1192,6 @@ function imgFor(ev) {
   border: 0;
 }
 
-/* =========================
-   MODAL
-   ========================= */
 .home-page .modal{
   position: fixed;
   inset: 0;
@@ -1244,9 +1318,6 @@ function imgFor(ev) {
   border: 1px solid #232747;
 }
 
-/* =========================
-   BREAKPOINTS
-   ========================= */
 @media (max-width: 1100px){
   .home-page .topbar{
     grid-template-columns: minmax(180px, 260px) 1fr 64px;
@@ -1312,14 +1383,12 @@ function imgFor(ev) {
   }
 }
 
-/* Laptop kecil */
 @media (min-width: 721px) and (max-width: 1024px){
   .home-page .sb-card{ right: 16px; top: calc(var(--topbar-h) + 8px); }
   .home-page .sb-card{ background: var(--brand); color:#2b1c08; }
   .home-page .sb-item{ color:#2b1c08; }
 }
 
-/* Safe area iOS */
 @supports (padding: max(0px)){
   .home-page .sb-card{
     padding-bottom: max(18px, env(safe-area-inset-bottom));

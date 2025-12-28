@@ -113,6 +113,41 @@ app.options(/.*/, corsMw)
    ========================= */
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 const BUCKET = process.env.SUPABASE_BUCKET || 'event-images'
+
+
+async function uploadEventImageToSupabase(file) {
+  if (!file?.buffer) throw new Error('file_required')
+
+  const bytes = file.buffer
+  const mime = file.mimetype || 'application/octet-stream'
+  const orig = (file.originalname || '').toLowerCase().trim()
+  const ext = (orig.includes('.') ? orig.split('.').pop() : '') || 'jpg'
+  const id = nanoid(12)
+  const path = `events/${id}.${ext}`
+
+  const { error: upErr } = await supabase
+    .storage
+    .from(BUCKET)
+    .upload(path, bytes, { contentType: mime, upsert: false })
+
+  if (upErr) throw new Error(upErr.message)
+
+  const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path)
+  const url = pub?.publicUrl || null
+  if (!url) throw new Error('upload_failed')
+
+  return { path, url }
+}
+
+function maybeUploadSingle(fieldName) {
+  const mw = upload.single(fieldName)
+  return (req, res, next) => {
+    const ct = String(req.headers['content-type'] || '')
+    if (ct.includes('multipart/form-data')) return mw(req, res, next)
+    return next()
+  }
+}
+
 // const upload = multer({ dest: 'uploads/' })
 
 /* =========================
@@ -313,12 +348,14 @@ const eventUpdateSchema = z.object({
   venue: z.string().min(1).max(160).optional(),
   description: z.string().max(4000).optional(),
   image_url: z.string().url().nullable().optional(),
-  price_idr: z.number().int().min(0).optional(),                 // harga tiket (Rp) 25-11-2025
-  // price_pol: z.number().min(0).optional(), diganti jadi price_idr
   total_tickets: z.number().int().min(0).optional(),
   listed: z.boolean().optional(),
-  chain_event_id: z.number().int().positive().optional()   // eventId dari smart contract ⬅️ ini ditambah 25-11-2025
+  chain_event_id: z.number().int().positive().optional(),
+
+  // penting: price_idr tidak boleh diupdate
+  price_idr: z.never().optional()
 })
+
 
 /* =========================
    SIWE-lite: Nonce & Verify
@@ -581,7 +618,7 @@ app.post('/api/events', requireAddress, async (req, res) => {
   res.status(201).json(data)
 })
 
-app.put('/api/events/:id', requireAddress, async (req, res) => {
+app.put('/api/events/:id', requireAddress, maybeUploadSingle('file'), async (req, res) => {
   const wallet = req.walletAddress
   const user = await ensureUserRow(wallet) // dari step 4
 
@@ -604,6 +641,10 @@ app.put('/api/events/:id', requireAddress, async (req, res) => {
     return res.status(403).json({ error: 'bukan_admin_atau_pemilik_event' }) // 'not_event_owner'
   }
 
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'price_idr')) {
+    return res.status(400).json({ error: 'price_idr_readonly' })
+  }
+
   if (typeof req.body?.date_iso === 'string') {
     try {
       validateUpdateEventDateIsoOrThrow(req.body.date_iso)
@@ -616,6 +657,20 @@ app.put('/api/events/:id', requireAddress, async (req, res) => {
     }
   }
 
+  let nextImageUrl = ev.image_url
+
+  if (req.file) {
+    try {
+      const up = await uploadEventImageToSupabase(req.file)
+      nextImageUrl = up.url
+    } catch (e) {
+      return res.status(500).json({ error: e?.message || 'upload_failed' })
+    }
+  } else if (typeof req.body?.image_url === 'string' && req.body.image_url.trim()) {
+    // optional untuk kompatibilitas lama, kalau kamu mau benar benar tanpa URL, hapus blok else-if ini
+    nextImageUrl = req.body.image_url.trim()
+  }
+
   // 3. baru boleh update
   const payload = {
     title: req.body?.title ?? ev.title,
@@ -624,7 +679,6 @@ app.put('/api/events/:id', requireAddress, async (req, res) => {
     description: req.body?.description ?? ev.description,
     image_url: req.body?.image_url ?? ev.image_url,
     total_tickets: Number(req.body?.total_tickets ?? ev.total_tickets),
-    price_idr: Number(req.body?.price_idr ?? ev.price_idr),
     listed: typeof req.body?.listed === 'boolean' ? req.body.listed : ev.listed, // req.body?.listed ?? ev.listed ini sebelumnya tapi diganti 25-11-2025
     chain_event_id: typeof req.body?.chain_event_id === 'number'
       ? req.body.chain_event_id
