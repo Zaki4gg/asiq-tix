@@ -165,7 +165,7 @@ async function loadEvents() {
   loading.value = true
   errorMsg.value = ''
   try {
-    const qs = isAdmin.value ? '?all=1' : ''
+    const qs = (isAdmin.value || isPromoter.value) ? '?all=1&include_unlisted=1' : ''
     const res = await api(`/api/events${qs}`)
     events.value = Array.isArray(res?.items) ? res.items : []
   } catch (e) {

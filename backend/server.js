@@ -768,17 +768,17 @@ app.patch('/api/events/:id/list', requireAddress, async (req, res) => {
 
 app.get('/api/events/:id', async (req, res) => {
   const id = String(req.params.id)
-  const { data: row, error } = await supabase.from('events').select('*').eq('id', id).maybeSingle()
+
+  const { data: row, error } = await supabase
+    .from('events')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
   if (error) return res.status(500).json({ error: error.message })
   if (!row) return res.status(404).json({ error: 'Event not found' })
+
   const addr = getReqAddress(req)
-  const admin = await isAdmin(addr)
-  if (!row.listed && !admin) return res.status(403).json({ error: 'Unlisted event' })
-  res.json(row)
-})
-app.get('/api/events', async (req, res) => {
-  const addr = getReqAddress(req)
-  const wantAll = req.query.all == '1' || req.query.include_unlisted == '1'
 
   let admin = false
   let user = null
@@ -788,21 +788,69 @@ app.get('/api/events', async (req, res) => {
     try { user = await ensureUserRow(addr) } catch { user = null }
   }
 
-  let q = supabase.from('events').select('*').order('date_iso', { ascending: false })
+  if (!row.listed) {
+    if (admin) return res.json(row)
 
-  if (admin && wantAll) {
-    // admin boleh lihat semua
-  } else if (wantAll && user?.role === 'promoter' && addr) {
-    // promoter boleh lihat listed true dan event miliknya sendiri
+    const isOwner =
+      user?.role === 'promoter' &&
+      normAddr(row.promoter_wallet) &&
+      normAddr(row.promoter_wallet) === normAddr(addr)
+
+    if (isOwner) return res.json(row)
+
+    let isBuyer = false
+    if (addr) {
+      const { data: txs, error: txErr } = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('kind', 'purchase')
+        .eq('ref_id', id)
+        .eq('wallet', normAddr(addr))
+        .in('status', ['confirmed', 'paid', 'success'])
+        .limit(1)
+
+      if (!txErr && Array.isArray(txs) && txs.length > 0) isBuyer = true
+    }
+
+    if (isBuyer) return res.json(row)
+
+    return res.status(403).json({ error: 'Unlisted event' })
+  }
+
+  return res.json(row)
+})
+
+app.get('/api/events', async (req, res) => {
+  const addr = getReqAddress(req)
+
+  let admin = false
+  let user = null
+
+  if (addr) {
+    admin = await isAdmin(addr)
+    try { user = await ensureUserRow(addr) } catch { user = null }
+  }
+
+  let q = supabase
+    .from('events')
+    .select('*')
+    .order('date_iso', { ascending: false })
+
+  if (admin) {
+    // admin lihat semua
+  } else if (user?.role === 'promoter' && addr) {
+    // promoter tetap lihat listed, plus event miliknya walau unlisted
     q = q.or(`listed.eq.true,promoter_wallet.eq.${addr}`)
   } else {
+    // customer atau tanpa wallet: hanya listed
     q = q.eq('listed', true)
   }
 
   const { data, error } = await q
   if (error) return res.status(500).json({ error: error.message })
-  res.json({ items: data })
+  return res.json({ items: data })
 })
+
 
 // Event milik promoter yang login
 app.get('/api/my-events', requireAddress, async (req, res) => {
