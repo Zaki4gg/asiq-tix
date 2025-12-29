@@ -267,7 +267,7 @@ onUnmounted(() => {
             <video ref="videoEl" class="video" autoplay playsinline muted></video>
 
             <div v-if="!scanning && !processing" class="overlay">
-              Klik <strong>Start</strong> untuk mulai scan
+              Klik Start untuk mulai scan
             </div>
 
             <div class="reticle" aria-hidden="true">
