@@ -8,7 +8,7 @@ import Purchase_Success_Dialog from '@/components/Purchase_Success_Dialog.vue'
 import Purchase_Error_Dialog from '@/components/Purchase_Error_Dialog.vue'
 import { ASIQTIX_TICKETS_ABI } from '@/abi/asiqtixTicketsSimpleV3'
 import BuyQuantityDialog from '@/components/BuyQuantityDialog.vue'
-import { prettifyBuyError } from '@/utils/friendly_errors'
+import { prettifyBuyError, prettifyWithdrawError } from '@/utils/friendly_errors'
 
 const route = useRoute()
 const r = useRouter()
@@ -441,9 +441,8 @@ async function withdrawPromoter () {
       e?.message ||
       'Unknown error'
 
-    withdrawMsg.value = `Gagal menarik dana: ${reason}`
-  } finally {
-    withdrawing.value = false
+    const userFriendly = prettifyWithdrawError(reason, e)
+    withdrawMsg.value = userFriendly
   }
 }
 
@@ -528,12 +527,17 @@ async function withdrawAdminFee () {
     await loadAdminFeeBalance()
   } catch (e) {
     console.error('[withdrawAdminFee] error', e)
-    let msg = String(e?.reason || e?.message || e || '')
-    if (msg.includes('NO_FEE')) msg = 'Tidak ada fee yang bisa ditarik.'
-    if (msg.includes('NOT_ADMIN')) msg = 'Wallet ini bukan admin/feeRecipient di kontrak.'
-    adminWithdrawMsg.value = msg
-  } finally {
-    adminWithdrawing.value = false
+    const rpcErr = e?.info?.error || e?.error || e
+    const reason =
+      e?.reason ||
+      e?.shortMessage ||
+      rpcErr?.data?.message ||
+      rpcErr?.message ||
+      e?.message ||
+      'Unknown error'
+
+    const userFriendly = prettifyWithdrawError(reason, e)
+    adminWithdrawMsg.value = userFriendly
   }
 }
 
