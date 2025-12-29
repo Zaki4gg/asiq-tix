@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -10,7 +10,11 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'confirm'])
 
-const maxSafe = computed(() => Math.max(1, Number(props.max || 1)))
+const maxSafe = computed(() => {
+  const m = Number(props.max)
+  if (!Number.isFinite(m)) return 1
+  return Math.max(1, Math.trunc(m))
+})
 
 function clamp(v) {
   const n = Number.parseInt(String(v), 10)
@@ -19,18 +23,28 @@ function clamp(v) {
 }
 
 const qty = ref(1)
+const inputRef = ref(null)
+
+async function syncInputValue() {
+  await nextTick()
+  if (inputRef.value) inputRef.value.value = String(qty.value)
+}
 
 watch(
   () => props.open,
-  (v) => {
-    if (v) qty.value = clamp(props.initial)
+  async (v) => {
+    if (v) {
+      qty.value = clamp(props.initial)
+      await syncInputValue()
+    }
   }
 )
 
 watch(
   () => props.max,
-  () => {
+  async () => {
     qty.value = clamp(qty.value)
+    await syncInputValue()
   }
 )
 
@@ -38,14 +52,25 @@ const canMinus = computed(() => qty.value > 1)
 const canPlus = computed(() => qty.value < maxSafe.value)
 
 function minus() {
-  if (canMinus.value) qty.value -= 1
+  if (!canMinus.value) return
+  qty.value -= 1
+  syncInputValue()
 }
+
 function plus() {
-  if (canPlus.value) qty.value += 1
+  if (!canPlus.value) return
+  qty.value += 1
+  syncInputValue()
 }
 
 function onInput(e) {
   qty.value = clamp(e.target.value)
+  e.target.value = String(qty.value)
+}
+
+function onBlur(e) {
+  qty.value = clamp(e.target.value)
+  e.target.value = String(qty.value)
 }
 
 function close() {
@@ -53,7 +78,11 @@ function close() {
 }
 
 function confirm() {
-  emit('confirm', qty.value)
+  const raw = inputRef.value ? inputRef.value.value : qty.value
+  const v = clamp(raw)
+  qty.value = v
+  if (inputRef.value) inputRef.value.value = String(v)
+  emit('confirm', v)
 }
 </script>
 
@@ -71,13 +100,16 @@ function confirm() {
             <button class="step" type="button" :disabled="!canMinus" @click="minus">−</button>
 
             <input
+              ref="inputRef"
               class="qty"
               type="number"
               inputmode="numeric"
               min="1"
               :max="maxSafe"
+              step="1"
               :value="qty"
               @input="onInput"
+              @blur="onBlur"
               @keydown.enter.prevent="confirm"
             />
 

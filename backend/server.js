@@ -48,7 +48,7 @@ const IS_PROD = process.env.NODE_ENV === 'production'
 const IS_TEST = process.env.NODE_ENV === 'test'
 const EVENT_MIN_LEAD_DAYS = Number(process.env.EVENT_MIN_LEAD_DAYS || process.env.EVENT_CREATE_WINDOW_DAYS || 7)
 const APP_TZ_OFFSET_MINUTES = Number(process.env.APP_TZ_OFFSET_MINUTES || 420)
-
+const MAX_TICKETS_PER_TX = Number(process.env.MAX_TICKETS_PER_TX || 20)
 
 const ORIGINS_ENV = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '')
   .split(',').map(s => s.trim()).filter(Boolean)
@@ -1184,7 +1184,18 @@ app.post(['/api/purchase', '/purchase'], requireAddress, async (req, res) => {
     }
     if (!qty) qty = 1
 
-    if (qty > remaining) return res.status(400).json({ error: 'Quantity exceeds remaining tickets' })
+    const perTxLimit = Math.max(1, Math.trunc(Number(MAX_TICKETS_PER_TX || 20)))
+    const maxAllowed = Math.min(perTxLimit, remaining)
+
+    if (qty > maxAllowed) {
+      return res.status(400).json({
+        error: 'quantity_exceeds_max_allowed',
+        max_allowed: maxAllowed,
+        remaining,
+        limit_per_tx: perTxLimit
+      })
+    }
+
 
     unitPriceIdr = Number(ev.price_idr ?? 0) || 0
     if (unitPriceIdr <= 0) {
@@ -1192,8 +1203,17 @@ app.post(['/api/purchase', '/purchase'], requireAddress, async (req, res) => {
     }
   }
 
-  if (!qty) qty = 1
-  if (qty > 20) return res.status(400).json({ error: 'quantity_too_large' })
+  qty = Math.trunc(Number(qty))
+  if (!Number.isFinite(qty) || qty < 1) qty = 1
+
+  const perTxLimit = Math.max(1, Math.trunc(Number(MAX_TICKETS_PER_TX || 20)))
+
+  if (qty > perTxLimit) {
+    return res.status(400).json({
+      error: 'quantity_exceeds_limit',
+      limit: perTxLimit
+    })
+  }
 
   // 3) Harga per tiket:
   // - pakai price_idr dari event kalau ada
