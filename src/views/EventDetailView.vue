@@ -8,6 +8,7 @@ import Purchase_Success_Dialog from '@/components/Purchase_Success_Dialog.vue'
 import Purchase_Error_Dialog from '@/components/Purchase_Error_Dialog.vue'
 import { ASIQTIX_TICKETS_ABI } from '@/abi/asiqtixTicketsSimpleV3'
 import BuyQuantityDialog from '@/components/BuyQuantityDialog.vue'
+import { prettifyBuyError } from '@/utils/friendly_errors'
 
 const route = useRoute()
 const r = useRouter()
@@ -280,8 +281,11 @@ async function buyTicket(qty = 1) {
       e?.message ||
       'Unknown error'
 
-    buyMsg.value = `Gagal membeli tiket: ${reason}`
-    lastPurchaseError.value = buyMsg.value
+    const userFriendly = prettifyBuyError(reason, e)
+    console.error('[BUY ERROR REASON]', reason)
+
+    buyMsg.value = userFriendly
+    lastPurchaseError.value = userFriendly
     showPurchaseError.value = true
   } finally {
     buying.value = false
